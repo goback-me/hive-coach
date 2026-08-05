@@ -1,0 +1,18 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: coach_os_postgres_dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: coach
+      POSTGRES_PASSWORD: coach
+      POSTGRES_DB: coach_os
+    ports:
+      - "5435:5432"
+    volumes:
+      - coach_os_pg_dev_data:/var/lib/postgresql/data
+
+volumes:
+  coach_os_pg_dev_data:
