@@ -3,6 +3,8 @@ import { getDashboardKpis } from "@/lib/needs-action";
 import { getRevenueTrend } from "@/lib/dashboard-data";
 import Link from "next/link";
 
+export const dynamic = "force-dynamic";
+
 const SEVERITY_STYLE: Record<string, { color: string; icon: string }> = {
   danger: { color: "var(--danger)", icon: "refresh" },
   success: { color: "var(--primary)", icon: "refresh" },

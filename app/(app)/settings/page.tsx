@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { saveIntegrationSettings, createOnboardingStepTemplate, createModule, createLesson } from "@/lib/actions";
 
+export const dynamic = "force-dynamic";
+
 export default async function SettingsPage() {
   const [integration, onboardingSteps, awardTiers, modules] = await Promise.all([
     prisma.integrationSettings.findUnique({ where: { id: "singleton" } }),

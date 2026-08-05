@@ -4,6 +4,8 @@ import ReferralBoard from "@/components/ReferralBoard";
 import AddReferralModal from "./AddReferralModal";
 import ReferralLinkManager from "./ReferralLinkManager";
 
+export const dynamic = "force-dynamic";
+
 export default async function ReferralsPage() {
   const [referrals, links] = await Promise.all([
     prisma.referral.findMany({ orderBy: { createdAt: "desc" } }),

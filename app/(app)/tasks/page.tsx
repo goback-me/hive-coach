@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { createTask, updateTaskStatus } from "@/lib/actions";
 import TaskList from "@/components/TaskList";
 
+export const dynamic = "force-dynamic";
+
 export default async function TasksPage() {
   const [tasks, clients] = await Promise.all([
     prisma.task.findMany({ orderBy: { dueDate: "asc" }, include: { client: { select: { name: true } } } }),

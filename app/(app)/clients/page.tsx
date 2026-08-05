@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/actions";
 import AddClientModal from "./AddClientModal";
 
+export const dynamic = "force-dynamic";
+
 const STATUS_STYLE: Record<string, { dot: string; bg: string; color: string; label: string }> = {
   ACTIVE: { dot: "var(--primary)", bg: "rgba(163,230,53,0.15)", color: "var(--primary)", label: "Active" },
   ONBOARDING: { dot: "#facc15", bg: "rgba(250,204,21,0.15)", color: "#facc15", label: "Onboarding" },
