@@ -9,6 +9,7 @@ import {
   createModule,
   createLesson,
 } from "@/lib/actions";
+import { requireClientAccess } from "@/lib/auth";
 import ClientTabsShell from "@/components/ClientTabsShell";
 import OnboardingChecklist from "@/components/OnboardingChecklist";
 import GameplanPanel from "@/components/GameplanPanel";
@@ -23,6 +24,10 @@ export default async function ClientDetailPage({ params }: { params: { slug: str
     include: { program: true },
   });
   if (!client) notFound();
+
+  // A client login gets bounced to /dashboard (which redirects to their own
+  // slug) if they try to view anyone else's page. A coach can view any client.
+  await requireClientAccess(client.id);
 
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);

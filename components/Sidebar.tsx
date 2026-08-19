@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import ThemeToggle from "./ThemeToggle";
+import { SignOutButton } from "@clerk/nextjs";
 
-const NAV_ITEMS = [
+const COACH_NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: "space_dashboard" },
   { href: "/clients", label: "Clients", icon: "diversity_3" },
   { href: "/referrals", label: "Referrals", icon: "share" },
@@ -13,8 +14,11 @@ const NAV_ITEMS = [
   { href: "/settings", label: "Settings", icon: "settings" },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ user }: { user: { name: string; role: "COACH" | "CLIENT" } }) {
   const pathname = usePathname();
+  // A client login only ever has their own client page — no cross-client
+  // nav items are rendered for them at all, not just hidden via CSS.
+  const navItems = user.role === "COACH" ? COACH_NAV_ITEMS : [];
 
   return (
     <aside
@@ -39,7 +43,7 @@ export default function Sidebar() {
       </div>
 
       <nav className="flex-1 space-y-1">
-        {NAV_ITEMS.map((item) => {
+        {navItems.map((item) => {
           const active = pathname === item.href || pathname?.startsWith(item.href + "/");
           return (
             <Link
@@ -58,19 +62,31 @@ export default function Sidebar() {
         })}
       </nav>
 
-      <div className="flex items-center justify-between px-2 pt-4" style={{ borderTop: "1px solid var(--border)" }}>
-        <div className="flex items-center gap-2">
-          <div
-            className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold"
-            style={{ background: "var(--primary-tint)", color: "var(--primary)" }}
-          >
-            C
+      <div className="space-y-2 pt-4" style={{ borderTop: "1px solid var(--border)" }}>
+        <div className="flex items-center justify-between px-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <div
+              className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+              style={{ background: "var(--primary-tint)", color: "var(--primary)" }}
+            >
+              {user.name.slice(0, 1).toUpperCase()}
+            </div>
+            <span className="text-sm font-medium truncate" style={{ color: "var(--text-primary)" }}>
+              {user.name}
+            </span>
           </div>
-          <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
-            Coach
-          </span>
+          <ThemeToggle />
         </div>
-        <ThemeToggle />
+        <SignOutButton redirectUrl="/login">
+          <button
+            type="button"
+            className="flex items-center gap-2 text-xs font-semibold w-full px-3 py-1"
+            style={{ color: "var(--text-secondary)" }}
+          >
+            <span className="material-symbols-outlined text-[16px]">logout</span>
+            Sign out
+          </button>
+        </SignOutButton>
       </div>
     </aside>
   );

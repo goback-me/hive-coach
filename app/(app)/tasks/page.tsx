@@ -1,10 +1,13 @@
 import { prisma } from "@/lib/prisma";
 import { createTask, updateTaskStatus } from "@/lib/actions";
+import { requireCoach } from "@/lib/auth";
 import TaskList from "@/components/TaskList";
 
 export const dynamic = "force-dynamic";
 
 export default async function TasksPage() {
+  await requireCoach(); // global cross-client task list; clients see their own tasks on their client page
+
   const [tasks, clients] = await Promise.all([
     prisma.task.findMany({ orderBy: { dueDate: "asc" }, include: { client: { select: { name: true } } } }),
     prisma.client.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),

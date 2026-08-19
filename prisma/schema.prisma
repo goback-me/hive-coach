@@ -166,15 +166,20 @@ model IntegrationSettings {
   updatedAt      DateTime @updatedAt
 }
 
+// Auth lives in Clerk — this table is the app-side profile that maps a
+// Clerk account to a role and (for clients) the one Client record they're
+// allowed to see.
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String
-  role         UserRole
-  name         String
-  clientId     String?
-  client       Client?  @relation(fields: [clientId], references: [id])
-  createdAt    DateTime @default(now())
+  id        String   @id @default(cuid())
+  clerkId   String   @unique // maps to Clerk's user.id
+  email     String   @unique
+  role      UserRole
+  name      String
+  clientId  String? // required for role=CLIENT, null for role=COACH (coach/admin sees everything)
+  client    Client?  @relation(fields: [clientId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@index([clientId])
 }
 
 enum ReferralStage {

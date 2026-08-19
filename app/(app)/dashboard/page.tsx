@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { getDashboardKpis } from "@/lib/needs-action";
 import { getRevenueTrend } from "@/lib/dashboard-data";
+import { requireUser } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +20,14 @@ const STATUS_STYLE: Record<string, { bg: string; color: string; label: string }>
 };
 
 export default async function DashboardPage() {
+  const user = await requireUser();
+  // This dashboard is an agency-wide overview (all clients, all revenue) —
+  // a client login gets sent straight to their own portal instead.
+  if (user.role === "CLIENT") {
+    const client = await prisma.client.findUnique({ where: { id: user.clientId ?? "" }, select: { slug: true } });
+    redirect(client ? `/clients/${client.slug}` : "/login");
+  }
+
   const kpis = await getDashboardKpis();
   const trend = await getRevenueTrend(12);
   const items = await prisma.needsActionItem.findMany({

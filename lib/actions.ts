@@ -3,6 +3,8 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { requireCoach, requireClientAccess } from "@/lib/auth";
+import { getClerkAdminClient } from "@/lib/clerk-admin";
 
 function slugify(name: string) {
   return name
@@ -75,6 +77,9 @@ export async function createTask(formData: FormData) {
   const dueDateRaw = String(formData.get("dueDate") || "");
   if (!title) throw new Error("Task title is required");
 
+  // A client can only create tasks under their own record; a coach can assign to anyone.
+  await requireClientAccess(clientId ?? "");
+
   await prisma.task.create({
     data: {
       title,
@@ -88,6 +93,10 @@ export async function createTask(formData: FormData) {
 }
 
 export async function updateTaskStatus(id: string, status: string) {
+  const task = await prisma.task.findUnique({ where: { id }, select: { clientId: true } });
+  if (!task) throw new Error("Task not found");
+  await requireClientAccess(task.clientId ?? "");
+
   await prisma.task.update({ where: { id }, data: { status: status as never } });
   revalidatePath("/tasks");
   revalidatePath("/clients");
@@ -95,6 +104,7 @@ export async function updateTaskStatus(id: string, status: string) {
 
 // ── Onboarding — completing a step never blocks the UI, just updates state ─
 export async function toggleOnboardingStep(clientId: string, templateId: string, completed: boolean) {
+  await requireClientAccess(clientId);
   await prisma.clientOnboardingStep.upsert({
     where: { clientId_templateId: { clientId, templateId } },
     update: { completedAt: completed ? new Date() : null },
@@ -104,6 +114,7 @@ export async function toggleOnboardingStep(clientId: string, templateId: string,
 }
 
 export async function createOnboardingStepTemplate(formData: FormData) {
+  await requireCoach();
   const title = String(formData.get("title") || "").trim();
   const description = String(formData.get("description") || "").trim();
   if (!title) throw new Error("Title is required");
@@ -117,6 +128,7 @@ export async function createOnboardingStepTemplate(formData: FormData) {
 
 // ── Gameplan (Figma embed) ───────────────────────────────────────────────
 export async function saveGameplanLink(clientId: string, formData: FormData) {
+  await requireClientAccess(clientId);
   const link = String(formData.get("figmaLink") || "").trim();
   await prisma.client.update({ where: { id: clientId }, data: { gameplanFigmaLink: link || null } });
   revalidatePath(`/clients`);
@@ -124,6 +136,7 @@ export async function saveGameplanLink(clientId: string, formData: FormData) {
 
 // ── Playbooks / lessons ──────────────────────────────────────────────────
 export async function toggleLessonComplete(clientId: string, lessonId: string, completed: boolean) {
+  await requireClientAccess(clientId);
   await prisma.clientLessonProgress.upsert({
     where: { clientId_lessonId: { clientId, lessonId } },
     update: { completedAt: completed ? new Date() : null },
@@ -136,6 +149,7 @@ export async function toggleLessonComplete(clientId: string, lessonId: string, c
 
 // ── Integration settings ─────────────────────────────────────────────────
 export async function saveIntegrationSettings(formData: FormData) {
+  await requireCoach();
   const clickupApiKey = String(formData.get("clickupApiKey") || "").trim();
   const clickupTeamId = String(formData.get("clickupTeamId") || "").trim();
   const crmType = String(formData.get("crmType") || "").trim();
@@ -151,6 +165,7 @@ export async function saveIntegrationSettings(formData: FormData) {
 
 // ── Playbooks — modules & lessons ────────────────────────────────────────
 export async function createModule(formData: FormData) {
+  await requireCoach();
   const title = String(formData.get("title") || "").trim();
   if (!title) throw new Error("Module title is required");
 
@@ -161,6 +176,7 @@ export async function createModule(formData: FormData) {
 }
 
 export async function createLesson(formData: FormData) {
+  await requireCoach();
   const moduleId = String(formData.get("moduleId") || "");
   const title = String(formData.get("title") || "").trim();
   const videoUrl = String(formData.get("videoUrl") || "").trim();
@@ -177,6 +193,7 @@ export async function createLesson(formData: FormData) {
 }
 
 export async function createClient(formData: FormData) {
+  await requireCoach();
   const name = String(formData.get("name") || "").trim();
   const description = String(formData.get("description") || "").trim();
   const programId = String(formData.get("programId") || "") || null;
@@ -201,4 +218,79 @@ export async function createClient(formData: FormData) {
 
   revalidatePath("/clients");
   redirect(`/clients/${client.slug}`);
+}
+
+// ── Users / logins (coach-only) ──────────────────────────────────────────
+// Creates the Clerk account AND the app-side profile in one go. The temp
+// password is shown once on screen — the user should change it after first
+// login (Clerk's account settings UI handles that, not built here).
+export async function createUser(formData: FormData) {
+  await requireCoach();
+
+  const name = String(formData.get("name") || "").trim();
+  const email = String(formData.get("email") || "").trim().toLowerCase();
+  const role = String(formData.get("role") || "CLIENT") as "COACH" | "CLIENT";
+  const clientId = String(formData.get("clientId") || "") || null;
+
+  if (!name) throw new Error("Name is required");
+  if (!email) throw new Error("Email is required");
+  if (role === "CLIENT" && !clientId) throw new Error("A client user must be linked to a client");
+
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) throw new Error("A user with that email already exists");
+
+  const tempPassword = randomCode(14);
+  const clerk = await getClerkAdminClient();
+
+  const [firstName, ...rest] = name.split(" ");
+  const lastName = rest.join(" ") || undefined;
+
+  let clerkUser;
+  try {
+    clerkUser = await clerk.users.createUser({
+      emailAddress: [email],
+      password: tempPassword,
+      firstName,
+      lastName,
+      skipPasswordChecks: false,
+    });
+  } catch (e: unknown) {
+    const message =
+      (e as { errors?: { message?: string }[] })?.errors?.[0]?.message ||
+      (e instanceof Error ? e.message : "Failed to create the login");
+    throw new Error(message);
+  }
+
+  try {
+    await prisma.user.create({
+      data: {
+        clerkId: clerkUser.id,
+        email,
+        name,
+        role,
+        clientId: role === "CLIENT" ? clientId : null,
+      },
+    });
+  } catch (e) {
+    // Roll back the Clerk account if the app-side profile fails, so we don't
+    // end up with an orphaned login that has no role/client.
+    await clerk.users.deleteUser(clerkUser.id);
+    throw e;
+  }
+
+  revalidatePath("/settings");
+  return { email, tempPassword };
+}
+
+export async function deleteUser(userId: string) {
+  await requireCoach();
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) return;
+
+  const clerk = await getClerkAdminClient();
+  await clerk.users.deleteUser(user.clerkId);
+  await prisma.user.delete({ where: { id: userId } });
+
+  revalidatePath("/settings");
 }

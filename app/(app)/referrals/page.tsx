@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { createReferral, createReferralLink, updateReferralStage } from "@/lib/actions";
+import { requireCoach } from "@/lib/auth";
 import ReferralBoard from "@/components/ReferralBoard";
 import AddReferralModal from "./AddReferralModal";
 import ReferralLinkManager from "./ReferralLinkManager";
@@ -7,6 +8,8 @@ import ReferralLinkManager from "./ReferralLinkManager";
 export const dynamic = "force-dynamic";
 
 export default async function ReferralsPage() {
+  await requireCoach(); // agency-wide referral pipeline, not client-visible
+
   const [referrals, links] = await Promise.all([
     prisma.referral.findMany({ orderBy: { createdAt: "desc" } }),
     prisma.referralLink.findMany({ orderBy: { createdAt: "desc" } }),

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/actions";
+import { requireCoach } from "@/lib/auth";
 import AddClientModal from "./AddClientModal";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +13,8 @@ const STATUS_STYLE: Record<string, { dot: string; bg: string; color: string; lab
 };
 
 export default async function ClientsPage() {
+  await requireCoach(); // client logins are redirected to their own client page, never this list
+
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 

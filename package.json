@@ -7,23 +7,26 @@
     "build": "next build",
     "start": "next start",
     "db:seed": "tsx prisma/seed.ts",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "create-admin": "tsx prisma/create-admin.ts"
   },
   "dependencies": {
+    "@clerk/nextjs": "^6.9.6",
+    "@clerk/backend": "^1.18.0",
     "@prisma/client": "^5.20.0",
-    "next": "14.2.5",
+    "next": "14.2.25",
     "react": "^18",
     "react-dom": "^18"
   },
   "devDependencies": {
-    "prisma": "^5.20.0",
-    "tsx": "^4.16.0",
-    "typescript": "^5",
-    "@types/node": "^20",
-    "@types/react": "^18",
-    "@types/react-dom": "^18",
-    "tailwindcss": "^4.0.0",
     "@tailwindcss/postcss": "^4.0.0",
-    "postcss": "^8.4.41"
+    "@types/node": "20.19.43",
+    "@types/react": "18.3.31",
+    "@types/react-dom": "^18",
+    "postcss": "^8.4.41",
+    "prisma": "^5.20.0",
+    "tailwindcss": "^4.0.0",
+    "tsx": "^4.16.0",
+    "typescript": "5.9.3"
   }
 }

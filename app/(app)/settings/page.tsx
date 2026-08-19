@@ -1,15 +1,29 @@
 import { prisma } from "@/lib/prisma";
 import { saveIntegrationSettings, createOnboardingStepTemplate, createModule, createLesson } from "@/lib/actions";
+import { requireCoach } from "@/lib/auth";
+import UsersPanel from "./UsersPanel";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
-  const [integration, onboardingSteps, awardTiers, modules] = await Promise.all([
+  await requireCoach();
+
+  const [integration, onboardingSteps, awardTiers, modules, users, clients] = await Promise.all([
     prisma.integrationSettings.findUnique({ where: { id: "singleton" } }),
     prisma.onboardingStepTemplate.findMany({ orderBy: { order: "asc" } }),
     prisma.awardTier.findMany({ orderBy: { order: "asc" } }),
     prisma.module.findMany({ orderBy: { order: "asc" }, include: { lessons: true } }),
+    prisma.user.findMany({ orderBy: { createdAt: "asc" }, include: { client: { select: { name: true } } } }),
+    prisma.client.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
+
+  const userRows = users.map((u) => ({
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    role: u.role,
+    clientName: u.client?.name ?? null,
+  }));
 
   return (
     <div className="p-10 max-w-[1000px] mx-auto space-y-8">
@@ -17,6 +31,8 @@ export default async function SettingsPage() {
         <h1 className="font-heading text-3xl font-bold" style={{ color: "var(--text-primary)" }}>Settings</h1>
         <p style={{ color: "var(--text-secondary)" }}>Connections and templates used across every client.</p>
       </div>
+
+      <UsersPanel users={userRows} clients={clients} />
 
       <section className="card rounded-2xl p-6">
         <h3 className="font-heading font-bold text-lg mb-1" style={{ color: "var(--text-primary)" }}>Integrations</h3>
