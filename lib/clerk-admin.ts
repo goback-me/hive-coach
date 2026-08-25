@@ -1,62 +1,13 @@
-// One-time bootstrap: creates the first COACH login.
-// After this, use Settings → Users in the app to create everyone else.
-//
-// Usage:
-//   ADMIN_EMAIL=you@hivesocial.agency ADMIN_PASSWORD='choose-a-strong-one' ADMIN_NAME="Adeel" \
-//     npx tsx prisma/create-admin.ts
-//
-// Requires CLERK_SECRET_KEY to be set (.env).
+import { clerkClient } from "@clerk/nextjs/server";
 
-import { createClerkClient } from "@clerk/backend";
-import { prisma } from "../lib/prisma";
-
-async function main() {
-  const email = process.env.ADMIN_EMAIL;
-  const password = process.env.ADMIN_PASSWORD;
-  const name = process.env.ADMIN_NAME || "Coach";
-
-  if (!email || !password) {
-    throw new Error("Set ADMIN_EMAIL and ADMIN_PASSWORD environment variables before running this script.");
-  }
-  if (!process.env.CLERK_SECRET_KEY) {
-    throw new Error("Set CLERK_SECRET_KEY in your .env first.");
-  }
-
-  const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
-
-  const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) {
-    console.log(`User ${email} already exists — nothing to do.`);
-    return;
-  }
-
-  const [firstName, ...rest] = name.split(" ");
-  const lastName = rest.join(" ") || undefined;
-  // Some Clerk instances require a username even when email is the primary
-  // identifier. Auto-generate one so this works either way — safe to remove
-  // the `username` field below once you've turned Username off in the
-  // Clerk dashboard (Configure → Email, Phone, Username).
-  const username = email.split("@")[0].replace(/[^a-zA-Z0-9_]/g, "") + "_" + Math.floor(Math.random() * 10000);
-
-  const clerkUser = await clerk.users.createUser({
-    emailAddress: [email],
-    password,
-    username,
-    firstName,
-    lastName,
-    skipPasswordChecks: false,
-  });
-
-  await prisma.user.create({
-    data: { clerkId: clerkUser.id, email, name, role: "COACH", clientId: null },
-  });
-
-  console.log(`Coach login created for ${email}. Sign in at /login.`);
+/**
+ * Server-only Clerk backend client (uses CLERK_SECRET_KEY under the hood).
+ * This bypasses normal auth checks entirely — it only exists to let a COACH
+ * create/delete logins for clients (there's no self-signup in this app).
+ *
+ * Only import this from Server Actions / Route Handlers that have already
+ * verified the caller is a COACH via lib/auth.ts.
+ */
+export async function getClerkAdminClient() {
+  return clerkClient();
 }
-
-main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(() => prisma.$disconnect());
