@@ -10,6 +10,7 @@ import {
   createLesson,
 } from "@/lib/actions";
 import { requireClientAccess } from "@/lib/auth";
+import { checkAndGrantAwards } from "@/lib/awards";
 import ClientTabsShell from "@/components/ClientTabsShell";
 import OnboardingChecklist from "@/components/OnboardingChecklist";
 import GameplanPanel from "@/components/GameplanPanel";
@@ -28,6 +29,11 @@ export default async function ClientDetailPage({ params }: { params: { slug: str
   // A client login gets bounced to /dashboard (which redirects to their own
   // slug) if they try to view anyone else's page. A coach can view any client.
   await requireClientAccess(client.id);
+
+  // Re-checks revenue/module thresholds against award tiers on every visit —
+  // not just when a lesson gets toggled — so editing a tier's threshold or a
+  // payment landing doesn't require an unrelated action to unlock it.
+  await checkAndGrantAwards(client.id);
 
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);

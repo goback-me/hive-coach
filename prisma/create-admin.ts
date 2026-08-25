@@ -24,34 +24,45 @@ async function main() {
 
   const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
 
-  const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) {
-    console.log(`User ${email} already exists — nothing to do.`);
+  const existingLocal = await prisma.user.findUnique({ where: { email } });
+  if (existingLocal) {
+    console.log(`User ${email} already exists in the database — nothing to do.`);
     return;
   }
 
-  const [firstName, ...rest] = name.split(" ");
-  const lastName = rest.join(" ") || undefined;
-  // Some Clerk instances require a username even when email is the primary
-  // identifier. Auto-generate one so this works either way — safe to remove
-  // the `username` field below once you've turned Username off in the
-  // Clerk dashboard (Configure → Email, Phone, Username).
-  const username = email.split("@")[0].replace(/[^a-zA-Z0-9_]/g, "") + "_" + Math.floor(Math.random() * 10000);
+  // If the Clerk account already exists (e.g. an earlier run created the
+  // Clerk login but failed to write the local User row — often because the
+  // DB wasn't reachable yet), just link it instead of trying to re-create
+  // it, which would fail on Clerk's side with a "duplicate email" error.
+  const existingClerkUsers = await clerk.users.getUserList({ emailAddress: [email] });
+  let clerkUser = existingClerkUsers.data[0];
 
-  const clerkUser = await clerk.users.createUser({
-    emailAddress: [email],
-    password,
-    username,
-    firstName,
-    lastName,
-    skipPasswordChecks: false,
-  });
+  if (clerkUser) {
+    console.log(`Found an existing Clerk account for ${email} — linking it instead of creating a new one.`);
+  } else {
+    const [firstName, ...rest] = name.split(" ");
+    const lastName = rest.join(" ") || undefined;
+    // Some Clerk instances require a username even when email is the primary
+    // identifier. Auto-generate one so this works either way — safe to remove
+    // the `username` field below once you've turned Username off in the
+    // Clerk dashboard (Configure → Email, Phone, Username).
+    const username = email.split("@")[0].replace(/[^a-zA-Z0-9_]/g, "") + "_" + Math.floor(Math.random() * 10000);
+
+    clerkUser = await clerk.users.createUser({
+      emailAddress: [email],
+      password,
+      username,
+      firstName,
+      lastName,
+      skipPasswordChecks: false,
+    });
+  }
 
   await prisma.user.create({
     data: { clerkId: clerkUser.id, email, name, role: "COACH", clientId: null },
   });
 
-  console.log(`Coach login created for ${email}. Sign in at /login.`);
+  console.log(`Coach login ready for ${email}. Sign in at /login.`);
 }
 
 main()

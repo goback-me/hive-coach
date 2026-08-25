@@ -10,7 +10,7 @@ services:
       POSTGRES_PASSWORD: coach
       POSTGRES_DB: coach_os
     ports:
-      - "5435:5432"
+      - "5432:5432"
     volumes:
       - coach_os_pg_dev_data:/var/lib/postgresql/data
 

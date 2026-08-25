@@ -244,12 +244,18 @@ export async function createUser(formData: FormData) {
 
   const [firstName, ...rest] = name.split(" ");
   const lastName = rest.join(" ") || undefined;
+  // Some Clerk instances require a username even when email is the primary
+  // identifier. Auto-generate one so this works either way — safe to remove
+  // the `username` field below once you've turned Username off in the
+  // Clerk dashboard (Configure → Email, Phone, Username).
+  const username = email.split("@")[0].replace(/[^a-zA-Z0-9_]/g, "") + "_" + Math.floor(Math.random() * 10000);
 
   let clerkUser;
   try {
     clerkUser = await clerk.users.createUser({
       emailAddress: [email],
       password: tempPassword,
+      username,
       firstName,
       lastName,
       skipPasswordChecks: false,
@@ -293,4 +299,41 @@ export async function deleteUser(userId: string) {
   await prisma.user.delete({ where: { id: userId } });
 
   revalidatePath("/settings");
+}
+
+// ── Sessions ──────────────────────────────────────────────────────────────
+export async function createSession(formData: FormData) {
+  const clientId = String(formData.get("clientId") || "");
+  const scheduledAtRaw = String(formData.get("scheduledAt") || "");
+  const durationMin = Number(formData.get("durationMin") || 45);
+  const notes = String(formData.get("notes") || "").trim();
+
+  if (!clientId) throw new Error("Choose a client");
+  if (!scheduledAtRaw) throw new Error("Choose a date and time");
+
+  // A client can only book against their own record; a coach can book for anyone.
+  await requireClientAccess(clientId);
+
+  await prisma.session.create({
+    data: {
+      clientId,
+      scheduledAt: new Date(scheduledAtRaw),
+      durationMin: Number.isFinite(durationMin) && durationMin > 0 ? durationMin : 45,
+      notes: notes || null,
+    },
+  });
+
+  revalidatePath("/sessions");
+  revalidatePath("/clients");
+}
+
+export async function updateSessionStatus(id: string, status: string) {
+  const session = await prisma.session.findUnique({ where: { id }, select: { clientId: true } });
+  if (!session) throw new Error("Session not found");
+  await requireClientAccess(session.clientId);
+
+  await prisma.session.update({ where: { id }, data: { status: status as never } });
+
+  revalidatePath("/sessions");
+  revalidatePath("/clients");
 }

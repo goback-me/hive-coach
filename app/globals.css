@@ -1,5 +1,28 @@
 @import "tailwindcss";
 
+.material-symbols-outlined {
+  /* Fixed box so layout never shifts whether the icon font is loaded,
+     loading, or fails entirely. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1em;
+  height: 1em;
+  overflow: hidden;
+  vertical-align: middle;
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+  -webkit-font-smoothing: antialiased;
+  /* Invisible until the fonts-loaded class (set in app/layout.tsx once the
+     icon font has actually finished loading) is present on <html> — this is
+     what stops raw fallback letters ("sp", "di", "sh"...) from ever showing.
+     visibility (not color) so this can't be overridden by icons that set
+     their own inline color, e.g. status dots. */
+  visibility: hidden;
+}
+html.fonts-loaded .material-symbols-outlined {
+  visibility: visible;
+}
+
 :root {
   --surface: #fafaf8;
   --surface-card: #ffffff;
