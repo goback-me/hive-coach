@@ -11,6 +11,19 @@ FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN rm -rf .next
+
+# NEXT_PUBLIC_* vars get baked into the client bundle at build time — next
+# build prerenders pages (including "/") during this step, and ClerkProvider
+# reads its publishableKey then, not at container runtime. A normal .env /
+# docker-compose environment: entry is NOT available yet at this point, so
+# it has to come in as a build arg instead.
+ARG NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+ARG NEXT_PUBLIC_CLERK_SIGN_IN_URL
+ARG NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL
+ENV NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+ENV NEXT_PUBLIC_CLERK_SIGN_IN_URL=$NEXT_PUBLIC_CLERK_SIGN_IN_URL
+ENV NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL=$NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL
+
 RUN npx prisma generate
 RUN npm run build
 
