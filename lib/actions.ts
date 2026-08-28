@@ -383,7 +383,13 @@ export async function verifyTrackingInstall(clientId: string) {
 
   const domain = normalizeDomain(client.trackingWebsiteUrl);
 
-  let result: { verified: boolean; checkedUrl?: string; httpStatus?: number; error?: string };
+  let result: {
+    verified: boolean;
+    checkedUrl?: string;
+    httpStatus?: number;
+    error?: string;
+    cacheDetected?: Record<string, string> | null;
+  };
   try {
     const res = await fetch(`${SWARM_URL}/clients/verify`, {
       method: "POST",
@@ -393,23 +399,46 @@ export async function verifyTrackingInstall(clientId: string) {
       cache: "no-store",
     });
     if (res.status === 401) throw new Error("Swarm rejected our credentials — check SWARM_DASHBOARD_USER/PASS");
+    if (!res.ok) throw new Error(`Swarm returned an unexpected error (HTTP ${res.status})`);
     result = await res.json();
   } catch (e) {
-    throw new Error(
-      e instanceof Error && e.name === "TimeoutError"
-        ? "Swarm took too long checking that site — try again"
-        : e instanceof Error
-          ? e.message
-          : "Couldn't reach Swarm to verify"
-    );
+    return {
+      verified: false,
+      error:
+        e instanceof Error && e.name === "TimeoutError"
+          ? "The site took too long to respond — it may be slow, blocking automated requests, or temporarily down. Try again."
+          : e instanceof Error
+            ? e.message
+            : "Couldn't reach Swarm to verify",
+    };
   }
-
+  let hasReceivedData = false;
+  let visitorCount = 0;
   if (result.verified) {
     await prisma.client.update({ where: { id: clientId }, data: { trackingVerifiedAt: new Date() } });
+
+    // Script tag being present on the page doesn't prove it's actually
+    // firing — check whether Swarm has genuinely recorded any real traffic
+    // for this domain yet, as a second, stronger confirmation signal.
+    try {
+      const summaryRes = await fetch(`${SWARM_URL}/reports/summary?site=${encodeURIComponent(domain)}`, {
+        headers: swarmAuthHeader(),
+        cache: "no-store",
+        signal: AbortSignal.timeout(8000),
+      });
+      if (summaryRes.ok) {
+        const summary = await summaryRes.json();
+        visitorCount = Number(summary?.total_visitors) || 0;
+        hasReceivedData = visitorCount > 0;
+      }
+    } catch {
+      // Non-fatal — the script IS confirmed installed either way; this just
+      // couldn't confirm live data yet. Don't fail verification over it.
+    }
   }
 
   revalidatePath("/clients");
-  return result;
+  return { ...result, hasReceivedData, visitorCount };
 }
 
 /**

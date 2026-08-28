@@ -2,6 +2,16 @@
 
 import { useState, useTransition } from "react";
 
+type VerifyResult = {
+  verified: boolean;
+  checkedUrl?: string;
+  httpStatus?: number;
+  error?: string;
+  hasReceivedData?: boolean;
+  visitorCount?: number;
+  cacheDetected?: Record<string, string> | null;
+};
+
 export default function TrackingPanel({
   clientId,
   websiteUrl,
@@ -17,13 +27,16 @@ export default function TrackingPanel({
   embedSnippet: string;
   embedUrl: string | null;
   onSaveWebsite: (clientId: string, formData: FormData) => Promise<void>;
-  onVerify: (clientId: string) => Promise<{ verified: boolean; checkedUrl?: string; httpStatus?: number; error?: string }>;
+  onVerify: (clientId: string) => Promise<VerifyResult>;
 }) {
   const [url, setUrl] = useState(websiteUrl ?? "");
   const [verifying, setVerifying] = useState(false);
-  const [verifyResult, setVerifyResult] = useState<{ verified: boolean; error?: string } | null>(null);
+  const [verifyResult, setVerifyResult] = useState<VerifyResult | null>(null);
   const [copied, setCopied] = useState(false);
   const [verified, setVerified] = useState(isVerified);
+  const [saveHover, setSaveHover] = useState(false);
+  const [copyHover, setCopyHover] = useState(false);
+  const [verifyHover, setVerifyHover] = useState(false);
   const [, startTransition] = useTransition();
 
   async function handleVerify() {
@@ -33,6 +46,14 @@ export default function TrackingPanel({
       const result = await onVerify(clientId);
       setVerifyResult(result);
       if (result.verified) setVerified(true);
+    } catch (e) {
+      // onVerify itself is written to never throw — but if something
+      // upstream (auth redirect, unexpected server error) does throw
+      // anyway, this is what stops it from failing completely silently.
+      setVerifyResult({
+        verified: false,
+        error: e instanceof Error ? e.message : "Something went wrong checking that site — try again.",
+      });
     } finally {
       setVerifying(false);
     }
@@ -69,7 +90,18 @@ export default function TrackingPanel({
             style={{ flex: 1, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
             className="px-3 py-2 rounded-lg outline-none text-sm"
           />
-          <button type="submit" className="px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-1" style={{ background: "var(--secondary)", color: "#14150f" }}>
+          <button
+            type="submit"
+            onMouseEnter={() => setSaveHover(true)}
+            onMouseLeave={() => setSaveHover(false)}
+            className="px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-1 transition-transform"
+            style={{
+              background: "var(--secondary)",
+              color: "#14150f",
+              transform: saveHover ? "translateY(-1px)" : "none",
+              boxShadow: saveHover ? "0 4px 12px rgba(0,0,0,0.15)" : "none",
+            }}
+          >
             <span className="material-symbols-outlined text-[16px]">save</span>
             Save
           </button>
@@ -80,7 +112,13 @@ export default function TrackingPanel({
         <div className="card rounded-2xl p-5 mb-4">
           <div className="flex items-center justify-between mb-2">
             <label className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>Paste this in their site's &lt;head&gt;</label>
-            <button onClick={copySnippet} className="text-xs font-semibold flex items-center gap-1" style={{ color: "var(--primary)" }}>
+            <button
+              onClick={copySnippet}
+              onMouseEnter={() => setCopyHover(true)}
+              onMouseLeave={() => setCopyHover(false)}
+              className="text-xs font-semibold flex items-center gap-1 transition-opacity"
+              style={{ color: "var(--primary)", opacity: copyHover ? 0.7 : 1 }}
+            >
               <span className="material-symbols-outlined text-[14px]">{copied ? "check" : "content_copy"}</span>
               {copied ? "Copied" : "Copy"}
             </button>
@@ -92,11 +130,22 @@ export default function TrackingPanel({
           <div className="flex items-center gap-3 mt-4">
             <button
               onClick={handleVerify}
+              onMouseEnter={() => setVerifyHover(true)}
+              onMouseLeave={() => setVerifyHover(false)}
               disabled={verifying}
-              className="px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2"
-              style={{ background: "var(--primary)", color: "#0d0d0b", opacity: verifying ? 0.6 : 1 }}
+              className="px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-transform"
+              style={{
+                background: "var(--primary)",
+                color: "#0d0d0b",
+                opacity: verifying ? 0.6 : 1,
+                transform: verifyHover && !verifying ? "translateY(-1px)" : "none",
+                boxShadow: verifyHover && !verifying ? "0 4px 12px rgba(0,0,0,0.15)" : "none",
+                cursor: verifying ? "default" : "pointer",
+              }}
             >
-              <span className="material-symbols-outlined text-[16px]">{verifying ? "progress_activity" : "check_circle"}</span>
+              <span className={`material-symbols-outlined text-[16px] ${verifying ? "animate-spin" : ""}`}>
+                {verifying ? "progress_activity" : "check_circle"}
+              </span>
               {verifying ? "Checking..." : "Check installation"}
             </button>
             {verified && (
@@ -107,10 +156,44 @@ export default function TrackingPanel({
             )}
           </div>
 
+          {/* Error state — always shown when the last check failed, whether
+              from a bad result or a thrown exception (both funnel here). */}
           {verifyResult && !verifyResult.verified && (
-            <p className="text-xs mt-3" style={{ color: "var(--danger)" }}>
-              {verifyResult.error || "Script not found on that page yet — make sure it's pasted and the site is deployed, then check again."}
-            </p>
+            <div className="mt-3 p-3 rounded-lg text-xs" style={{ background: "rgba(248,113,113,0.1)", color: "var(--danger)" }}>
+              <p className="font-semibold mb-1">Couldn't confirm installation</p>
+              {verifyResult.cacheDetected ? (
+                <p>
+                  We can't see the script yet — but this page looks like it's being served from a <strong>cache</strong>, not freshly generated.
+                  If the snippet was just added, ask them to clear their site's cache (WP Rocket, LiteSpeed Cache, Cloudflare, or whatever
+                  caching plugin/CDN they use) and check again in a minute.
+                </p>
+              ) : (
+                <p>{verifyResult.error || "Script not found on that page yet — make sure it's pasted and the site is deployed, then check again."}</p>
+              )}
+              {verifyResult.checkedUrl && (
+                <p className="mt-1" style={{ color: "var(--text-muted)" }}>
+                  Checked: <span className="font-mono">{verifyResult.checkedUrl}</span>
+                  {verifyResult.httpStatus ? ` (HTTP ${verifyResult.httpStatus})` : ""}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Success — but distinguish "script present" from "actually
+              sending real data", since those are two different confidence
+              levels and conflating them hides a real "installed but not
+              actually firing" failure mode. */}
+          {verifyResult && verifyResult.verified && (
+            <div
+              className="mt-3 p-3 rounded-lg text-xs"
+              style={{ background: verifyResult.hasReceivedData ? "rgba(163,230,53,0.15)" : "rgba(250,204,21,0.12)", color: verifyResult.hasReceivedData ? "var(--primary)" : "#b45309" }}
+            >
+              {verifyResult.hasReceivedData ? (
+                <p>✓ Script found, and already receiving real traffic ({verifyResult.visitorCount} visitor{verifyResult.visitorCount === 1 ? "" : "s"} recorded so far).</p>
+              ) : (
+                <p>✓ Script found on the page — but no visits recorded yet. That's normal if nobody's browsed the site since it was added; check back after someone visits.</p>
+              )}
+            </div>
           )}
         </div>
       )}
