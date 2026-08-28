@@ -343,28 +343,12 @@ export async function updateSessionStatus(id: string, status: string) {
 // credentials to any browser. Everything below either updates our own
 // `Client` row, or makes a server-to-server call to Swarm using
 // SWARM_DASHBOARD_USER/PASS (held only in this server's env).
-
-const SWARM_URL = (process.env.SWARM_URL || "https://data.hivesocial.agency").replace(/\/$/, "");
-const SWARM_USER = process.env.SWARM_DASHBOARD_USER || "";
-const SWARM_PASS = process.env.SWARM_DASHBOARD_PASS || "";
-
-function swarmAuthHeader(): Record<string, string> {
-  if (!SWARM_USER || !SWARM_PASS) return {};
-  return { Authorization: `Basic ${Buffer.from(`${SWARM_USER}:${SWARM_PASS}`).toString("base64")}` };
-}
-
-function normalizeDomain(websiteUrl: string): string {
-  try {
-    return new URL(websiteUrl).hostname.replace(/^www\./, "");
-  } catch {
-    return websiteUrl.replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, "");
-  }
-}
-
-/** The one universal embed snippet every client pastes — identical for everyone. */
-export function swarmEmbedSnippet() {
-  return `<script src="${SWARM_URL}/pixel.js" data-endpoint="${SWARM_URL}"></script>`;
-}
+// SWARM_URL/swarmAuthHeader/normalizeDomain/swarmEmbedSnippet live in
+// lib/swarm-config.ts (not here) since swarmEmbedSnippet is a plain sync
+// string builder, and every export from a "use server" file must be async.
+// Import swarmEmbedSnippet from "@/lib/swarm-config" directly wherever it's
+// used — not re-exported from here.
+import { SWARM_URL, swarmAuthHeader, normalizeDomain } from "./swarm-config";
 
 /** Sets/updates the client's website URL. Doesn't touch Swarm — that only happens on verify. */
 export async function saveTrackingWebsite(clientId: string, formData: FormData) {

@@ -11,8 +11,8 @@ import {
   saveTrackingWebsite,
   verifyTrackingInstall,
   getSwarmEmbedUrl,
-  swarmEmbedSnippet,
 } from "@/lib/actions";
+import { swarmEmbedSnippet } from "@/lib/swarm-config";
 import { requireClientAccess } from "@/lib/auth";
 import { checkAndGrantAwards } from "@/lib/awards";
 import ClientTabsShell from "@/components/ClientTabsShell";
