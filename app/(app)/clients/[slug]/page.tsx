@@ -24,6 +24,15 @@ import AwardsPanel from "@/components/AwardsPanel";
 import TrackingPanel from "@/components/TrackingPanel";
 import TaskList from "@/components/TaskList";
 
+// Forces this page to render fresh on every single request — no static
+// caching, no ISR. Without this, if Next.js ever treats this route as
+// cacheable for any reason, the embedUrl (with its 45-min token) could get
+// served stale indefinitely regardless of how many times the page is
+// reloaded, since the server would never actually re-run getSwarmEmbedUrl.
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const fetchCache = "force-no-store";
+
 export default async function ClientDetailPage({ params }: { params: { slug: string } }) {
   const client = await prisma.client.findUnique({
     where: { slug: params.slug },
