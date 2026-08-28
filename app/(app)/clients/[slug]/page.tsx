@@ -8,6 +8,10 @@ import {
   updateTaskStatus,
   createModule,
   createLesson,
+  saveTrackingWebsite,
+  verifyTrackingInstall,
+  getSwarmEmbedUrl,
+  swarmEmbedSnippet,
 } from "@/lib/actions";
 import { requireClientAccess } from "@/lib/auth";
 import { checkAndGrantAwards } from "@/lib/awards";
@@ -17,6 +21,7 @@ import GameplanPanel from "@/components/GameplanPanel";
 import PlaybooksPanel from "@/components/PlaybooksPanel";
 import AdsPanel from "@/components/AdsPanel";
 import AwardsPanel from "@/components/AwardsPanel";
+import TrackingPanel from "@/components/TrackingPanel";
 import TaskList from "@/components/TaskList";
 
 export default async function ClientDetailPage({ params }: { params: { slug: string } }) {
@@ -68,6 +73,11 @@ export default async function ClientDetailPage({ params }: { params: { slug: str
   const lifetimeRevenue = Number(lifetimeRevenueAgg._sum.amountDue ?? 0);
   const totalSpend = campaigns.reduce((s, c) => s + Number(c.spend), 0);
   const profit = revThisMonth - totalSpend;
+
+  // Mints a fresh, short-lived, scoped token on every page load — nothing
+  // about this client's domain ever appears in a URL. Only bother calling
+  // Swarm at all once the install is actually verified.
+  const swarmEmbedUrl = client.trackingVerifiedAt ? await getSwarmEmbedUrl(client.id) : null;
 
   const dashboardContent = (
     <div>
@@ -153,6 +163,18 @@ export default async function ClientDetailPage({ params }: { params: { slug: str
     />
   );
 
+  const trackingContent = (
+    <TrackingPanel
+      clientId={client.id}
+      websiteUrl={client.trackingWebsiteUrl}
+      isVerified={!!client.trackingVerifiedAt}
+      embedSnippet={swarmEmbedSnippet()}
+      embedUrl={swarmEmbedUrl}
+      onSaveWebsite={saveTrackingWebsite}
+      onVerify={verifyTrackingInstall}
+    />
+  );
+
   return (
     <div className="p-10 max-w-[1500px] mx-auto">
       <div className="flex items-center gap-4 mb-6">
@@ -179,6 +201,7 @@ export default async function ClientDetailPage({ params }: { params: { slug: str
           { key: "gameplan", label: "Gameplan", content: gameplanContent },
           { key: "playbooks", label: "Playbooks", content: playbooksContent },
           { key: "ads", label: "Ads", content: adsContent },
+          { key: "tracking", label: "Tracking", content: trackingContent },
           { key: "tasks", label: "Tasks", content: tasksContent },
           { key: "awards", label: "Awards", content: awardsContent },
         ]}

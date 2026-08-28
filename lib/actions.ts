@@ -337,3 +337,124 @@ export async function updateSessionStatus(id: string, status: string) {
   revalidatePath("/sessions");
   revalidatePath("/clients");
 }
+
+// ── Swarm tracking integration ───────────────────────────────────────────
+// Coach OS never shares a database with Swarm and never sends Swarm's admin
+// credentials to any browser. Everything below either updates our own
+// `Client` row, or makes a server-to-server call to Swarm using
+// SWARM_DASHBOARD_USER/PASS (held only in this server's env).
+
+const SWARM_URL = (process.env.SWARM_URL || "https://data.hivesocial.agency").replace(/\/$/, "");
+const SWARM_USER = process.env.SWARM_DASHBOARD_USER || "";
+const SWARM_PASS = process.env.SWARM_DASHBOARD_PASS || "";
+
+function swarmAuthHeader(): Record<string, string> {
+  if (!SWARM_USER || !SWARM_PASS) return {};
+  return { Authorization: `Basic ${Buffer.from(`${SWARM_USER}:${SWARM_PASS}`).toString("base64")}` };
+}
+
+function normalizeDomain(websiteUrl: string): string {
+  try {
+    return new URL(websiteUrl).hostname.replace(/^www\./, "");
+  } catch {
+    return websiteUrl.replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, "");
+  }
+}
+
+/** The one universal embed snippet every client pastes — identical for everyone. */
+export function swarmEmbedSnippet() {
+  return `<script src="${SWARM_URL}/pixel.js" data-endpoint="${SWARM_URL}"></script>`;
+}
+
+/** Sets/updates the client's website URL. Doesn't touch Swarm — that only happens on verify. */
+export async function saveTrackingWebsite(clientId: string, formData: FormData) {
+  await requireClientAccess(clientId);
+
+  const websiteUrl = String(formData.get("websiteUrl") || "").trim();
+  if (!websiteUrl) throw new Error("Enter a website URL");
+  try {
+    new URL(websiteUrl);
+  } catch {
+    throw new Error("That doesn't look like a valid URL (include https://)");
+  }
+
+  await prisma.client.update({
+    where: { id: clientId },
+    data: { trackingWebsiteUrl: websiteUrl, trackingVerifiedAt: null },
+  });
+
+  revalidatePath("/clients");
+}
+
+/**
+ * Calls Swarm's real POST /clients/verify — Swarm fetches the site
+ * server-side, confirms the pixel script is actually there, and (only if
+ * found) registers + marks the domain verified on its own side too.
+ */
+export async function verifyTrackingInstall(clientId: string) {
+  await requireClientAccess(clientId);
+
+  const client = await prisma.client.findUnique({ where: { id: clientId }, select: { trackingWebsiteUrl: true } });
+  if (!client?.trackingWebsiteUrl) throw new Error("Add a website URL first");
+
+  const domain = normalizeDomain(client.trackingWebsiteUrl);
+
+  let result: { verified: boolean; checkedUrl?: string; httpStatus?: number; error?: string };
+  try {
+    const res = await fetch(`${SWARM_URL}/clients/verify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...swarmAuthHeader() },
+      body: JSON.stringify({ domain }),
+      signal: AbortSignal.timeout(15000),
+      cache: "no-store",
+    });
+    if (res.status === 401) throw new Error("Swarm rejected our credentials — check SWARM_DASHBOARD_USER/PASS");
+    result = await res.json();
+  } catch (e) {
+    throw new Error(
+      e instanceof Error && e.name === "TimeoutError"
+        ? "Swarm took too long checking that site — try again"
+        : e instanceof Error
+          ? e.message
+          : "Couldn't reach Swarm to verify"
+    );
+  }
+
+  if (result.verified) {
+    await prisma.client.update({ where: { id: clientId }, data: { trackingVerifiedAt: new Date() } });
+  }
+
+  revalidatePath("/clients");
+  return result;
+}
+
+/**
+ * Mints a short-lived, opaque, single-purpose token scoped to exactly this
+ * client's domain — this is what goes in the iframe src, NOT the domain
+ * itself. Swarm resolves the real domain server-side on every request; the
+ * token reveals nothing if intercepted, and expires in 45 minutes even if
+ * never used. Called fresh on every Tracking-tab page render.
+ */
+export async function getSwarmEmbedUrl(clientId: string): Promise<string | null> {
+  await requireClientAccess(clientId);
+
+  const client = await prisma.client.findUnique({ where: { id: clientId }, select: { trackingWebsiteUrl: true, trackingVerifiedAt: true } });
+  if (!client?.trackingWebsiteUrl || !client.trackingVerifiedAt) return null;
+
+  const domain = normalizeDomain(client.trackingWebsiteUrl);
+
+  try {
+    const res = await fetch(`${SWARM_URL}/embed/session`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...swarmAuthHeader() },
+      body: JSON.stringify({ domain }),
+      signal: AbortSignal.timeout(10000),
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const { token } = await res.json();
+    return `${SWARM_URL}/dashboard/swarm?embed_token=${encodeURIComponent(token)}`;
+  } catch {
+    return null;
+  }
+}

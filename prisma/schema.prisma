@@ -246,12 +246,12 @@ model Client {
   awards        ClientAward[]
   gameplanFigmaLink String?
 
-  // Swarm/TrafficLedger tracking integration — Coach OS never shares a
-  // database with Swarm; stats are fetched live over HTTP, keyed by this
-  // client's website hostname (that's how Swarm's own multi-tenancy works —
-  // no client id needed, the tracker infers "site" from the tracked page URL).
+  // Swarm tracking integration — Coach OS never shares a database with
+  // Swarm; the live dashboard is embedded via a short-lived scoped token
+  // (see lib/actions.ts getSwarmEmbedUrl), never by exposing this domain
+  // directly in any URL.
   trackingWebsiteUrl String?
-  trackingVerifiedAt DateTime? // last time we confirmed the pixel script is actually live on their site
+  trackingVerifiedAt DateTime?
 }
 
 model Session {
