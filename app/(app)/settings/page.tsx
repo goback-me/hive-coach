@@ -38,6 +38,9 @@ export default async function SettingsPage() {
         <h3 className="font-heading font-bold text-lg mb-1" style={{ color: "var(--text-primary)" }}>Integrations</h3>
         <p className="text-sm mb-4" style={{ color: "var(--text-secondary)" }}>
           Connect ClickUp to sync tasks automatically, or keep using manual task entry — both work side by side.
+          The agency-wide Google account used for client lead sheets, and each client's own Meta Ads connection,
+          are managed on the <a href="/leads" style={{ color: "var(--primary)", fontWeight: 600 }}>Leads</a> page
+          and each client's Ads tab.
         </p>
         <form action={saveIntegrationSettings} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
@@ -60,7 +63,7 @@ export default async function SettingsPage() {
             </div>
             <Field label="API key or sheet URL" name="crmApiKeyOrUrl" defaultValue={integration?.crmApiKeyOrUrl ?? ""} placeholder="https://docs.google.com/..." />
           </div>
-          <button type="submit" className="px-4 py-2 rounded-lg text-sm font-bold" style={{ background: "var(--secondary)", color: "#14150f" }}>
+          <button type="submit" className="px-4 py-2 rounded-lg text-sm font-bold btn-cta" style={{ background: "var(--secondary)", color: "#fff" }}>
             Save integrations
           </button>
         </form>
@@ -89,7 +92,7 @@ export default async function SettingsPage() {
         <form action={createOnboardingStepTemplate} className="flex gap-2">
           <input name="title" required placeholder="Step title" style={{ flex: 1, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }} className="px-3 py-2 rounded-lg outline-none text-sm" />
           <input name="description" placeholder="Description (optional)" style={{ flex: 1, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }} className="px-3 py-2 rounded-lg outline-none text-sm" />
-          <button type="submit" className="px-4 py-2 rounded-lg text-sm font-bold" style={{ background: "var(--primary)", color: "#0d0d0b" }}>Add step</button>
+          <button type="submit" className="px-4 py-2 rounded-lg text-sm font-bold" style={{ background: "var(--primary)", color: "#fff" }}>Add step</button>
         </form>
       </section>
 
@@ -113,7 +116,7 @@ export default async function SettingsPage() {
 
         <form action={createModule} className="flex gap-2 mb-5">
           <input name="title" required placeholder="New module title, e.g. IG & YT Content" style={{ flex: 1, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }} className="px-3 py-2 rounded-lg outline-none text-sm" />
-          <button type="submit" className="px-4 py-2 rounded-lg text-sm font-bold" style={{ background: "var(--primary)", color: "#0d0d0b" }}>Add module</button>
+          <button type="submit" className="px-4 py-2 rounded-lg text-sm font-bold" style={{ background: "var(--primary)", color: "#fff" }}>Add module</button>
         </form>
 
         <div style={{ borderTop: "1px solid var(--border)" }} className="pt-4">
@@ -126,7 +129,7 @@ export default async function SettingsPage() {
             <input name="title" required placeholder="Lesson title" style={{ width: "100%", background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }} className="px-3 py-2 rounded-lg outline-none text-sm" />
             <input name="videoUrl" placeholder="YouTube or Loom link (optional)" style={{ width: "100%", background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }} className="px-3 py-2 rounded-lg outline-none text-sm" />
             <textarea name="content" placeholder="Written content (optional)" rows={3} style={{ width: "100%", background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }} className="px-3 py-2 rounded-lg outline-none text-sm resize-none" />
-            <button type="submit" className="px-4 py-2 rounded-lg text-sm font-bold" style={{ background: "var(--secondary)", color: "#14150f" }}>Add lesson</button>
+            <button type="submit" className="px-4 py-2 rounded-lg text-sm font-bold btn-cta" style={{ background: "var(--secondary)", color: "#fff" }}>Add lesson</button>
           </form>
         </div>
       </section>

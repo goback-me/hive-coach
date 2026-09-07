@@ -66,7 +66,7 @@ export default function UsersPanel({ users, clients }: { users: UserRow[]; clien
       {state && "tempPassword" in state && (
         <div
           className="mb-4 px-4 py-3 rounded-lg text-sm space-y-1"
-          style={{ background: "rgba(163,230,53,0.15)", color: "var(--text-primary)" }}
+          style={{ background: "var(--primary-tint)", color: "var(--text-primary)" }}
         >
           <p className="font-semibold">Login created for {state.email}</p>
           <p>
@@ -78,7 +78,7 @@ export default function UsersPanel({ users, clients }: { users: UserRow[]; clien
         </div>
       )}
       {state && "error" in state && (
-        <div className="mb-4 px-4 py-3 rounded-lg text-sm" style={{ background: "rgba(248,113,113,0.15)", color: "var(--danger)" }}>
+        <div className="mb-4 px-4 py-3 rounded-lg text-sm" style={{ background: "var(--danger-tint)", color: "var(--danger)" }}>
           {state.error}
         </div>
       )}
@@ -117,7 +117,7 @@ export default function UsersPanel({ users, clients }: { users: UserRow[]; clien
         <button
           type="submit"
           className="col-span-2 px-4 py-2 rounded-lg text-sm font-bold"
-          style={{ background: "var(--primary)", color: "#0d0d0b" }}
+          style={{ background: "var(--primary)", color: "#fff" }}
         >
           Create login
         </button>

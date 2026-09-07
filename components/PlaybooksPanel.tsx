@@ -56,7 +56,7 @@ export default function PlaybooksPanel({
           <button
             onClick={() => setAddOpen("module")}
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold"
-            style={{ background: "var(--primary)", color: "#0d0d0b" }}
+            style={{ background: "var(--primary)", color: "#fff" }}
           >
             <span className="material-symbols-outlined text-[16px]">add</span>
             Add module
@@ -92,7 +92,7 @@ export default function PlaybooksPanel({
               <div className="flex items-center gap-3">
                 <div
                   className="w-7 h-7 rounded-lg flex items-center justify-center text-sm font-bold shrink-0"
-                  style={{ background: "var(--primary)", color: "#14150f" }}
+                  style={{ background: "var(--primary)", color: "#fff" }}
                 >
                   {i + 1}
                 </div>
@@ -116,7 +116,7 @@ export default function PlaybooksPanel({
                     <button
                       onClick={(e) => { e.stopPropagation(); toggle(lesson.id); }}
                       className="w-6 h-6 rounded flex items-center justify-center shrink-0"
-                      style={{ background: done ? "var(--primary)" : "var(--surface-hover)", color: done ? "#14150f" : "var(--text-muted)" }}
+                      style={{ background: done ? "var(--primary)" : "var(--surface-hover)", color: done ? "#fff" : "var(--text-muted)" }}
                     >
                       <span className="material-symbols-outlined text-[16px]">check</span>
                     </button>
@@ -179,7 +179,7 @@ export default function PlaybooksPanel({
               </div>
               <div className="flex justify-end gap-2">
                 <button type="button" onClick={() => setAddOpen(null)} className="px-4 py-2 rounded-lg text-sm font-semibold" style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>Cancel</button>
-                <button type="submit" className="px-4 py-2 rounded-lg text-sm font-bold" style={{ background: "var(--primary)", color: "#0d0d0b" }}>Add module</button>
+                <button type="submit" className="px-4 py-2 rounded-lg text-sm font-bold" style={{ background: "var(--primary)", color: "#fff" }}>Add module</button>
               </div>
             </form>
           </div>
@@ -221,7 +221,7 @@ export default function PlaybooksPanel({
               </div>
               <div className="flex justify-end gap-2 pt-1">
                 <button type="button" onClick={() => setAddOpen(null)} className="px-4 py-2 rounded-lg text-sm font-semibold" style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>Cancel</button>
-                <button type="submit" className="px-4 py-2 rounded-lg text-sm font-bold" style={{ background: "var(--secondary)", color: "#14150f" }}>Add lesson</button>
+                <button type="submit" className="px-4 py-2 rounded-lg text-sm font-bold btn-cta" style={{ background: "var(--secondary)", color: "#fff" }}>Add lesson</button>
               </div>
             </form>
           </div>

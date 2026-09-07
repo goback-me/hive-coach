@@ -97,7 +97,7 @@ export default function TrackingPanel({
             className="px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-1 transition-transform"
             style={{
               background: "var(--secondary)",
-              color: "#14150f",
+              color: "#fff",
               transform: saveHover ? "translateY(-1px)" : "none",
               boxShadow: saveHover ? "0 4px 12px rgba(0,0,0,0.15)" : "none",
             }}
@@ -136,7 +136,7 @@ export default function TrackingPanel({
               className="px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-transform"
               style={{
                 background: "var(--primary)",
-                color: "#0d0d0b",
+                color: "#fff",
                 opacity: verifying ? 0.6 : 1,
                 transform: verifyHover && !verifying ? "translateY(-1px)" : "none",
                 boxShadow: verifyHover && !verifying ? "0 4px 12px rgba(0,0,0,0.15)" : "none",
@@ -159,7 +159,7 @@ export default function TrackingPanel({
           {/* Error state — always shown when the last check failed, whether
               from a bad result or a thrown exception (both funnel here). */}
           {verifyResult && !verifyResult.verified && (
-            <div className="mt-3 p-3 rounded-lg text-xs" style={{ background: "rgba(248,113,113,0.1)", color: "var(--danger)" }}>
+            <div className="mt-3 p-3 rounded-lg text-xs" style={{ background: "var(--danger-tint)", color: "var(--danger)" }}>
               <p className="font-semibold mb-1">Couldn't confirm installation</p>
               {verifyResult.cacheDetected ? (
                 <p>
@@ -186,7 +186,7 @@ export default function TrackingPanel({
           {verifyResult && verifyResult.verified && (
             <div
               className="mt-3 p-3 rounded-lg text-xs"
-              style={{ background: verifyResult.hasReceivedData ? "rgba(163,230,53,0.15)" : "rgba(250,204,21,0.12)", color: verifyResult.hasReceivedData ? "var(--primary)" : "#b45309" }}
+              style={{ background: verifyResult.hasReceivedData ? "var(--primary-tint)" : "var(--surface-hover)", color: verifyResult.hasReceivedData ? "var(--primary)" : "var(--text-secondary)" }}
             >
               {verifyResult.hasReceivedData ? (
                 <p>✓ Script found, and already receiving real traffic ({verifyResult.visitorCount} visitor{verifyResult.visitorCount === 1 ? "" : "s"} recorded so far).</p>

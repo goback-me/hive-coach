@@ -1,42 +1,56 @@
 import { redirect } from "next/navigation";
 import { cache } from "react";
 import { auth } from "@clerk/nextjs/server";
-import { prisma } from "@/lib/prisma";
 
 export type CurrentUser = {
-  id: string;
+  id: string; // Clerk user id — app-side User.id is looked up separately where needed (e.g. Settings)
   clerkId: string;
   email: string;
   name: string;
   role: "COACH" | "CLIENT";
   clientId: string | null;
+  clientSlug: string | null;
 };
 
-/**
- * Resolves the logged-in Clerk user to our app-side User/role/clientId.
- * `cache()` dedupes this within a single request — safe to call from every
- * page/layout without worrying about extra round trips.
- */
+// Adapted from Hive OS: role/clientId/clientSlug live in Clerk's
+// publicMetadata (set the moment an account is created — see
+// lib/actions.ts createUser — and mirrored by the Clerk webhook,
+// app/api/webhooks/clerk/route.ts, if it's ever changed from the Clerk
+// dashboard directly). This avoids a Prisma round trip on every request;
+// middleware.ts is what actually redirects unauthenticated/unassigned
+// visitors away, this is the last-line guard for pages/actions it
+// doesn't cover. `cache()` dedupes this within a single request.
 export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
-  const { userId } = await auth();
+  const { userId, sessionClaims } = await auth();
   if (!userId) return null;
 
-  const appUser = await prisma.user.findUnique({
-    where: { clerkId: userId },
-  });
+  const metadata = (sessionClaims?.publicMetadata ?? {}) as {
+    role?: "COACH" | "CLIENT";
+    clientId?: string;
+    clientSlug?: string;
+    name?: string;
+  };
 
-  // Logged into Clerk but no matching app profile — treat as unauthenticated.
-  // (Shouldn't happen in normal use since accounts are only created via the
-  // admin "Create user" flow, which always creates both at once.)
-  if (!appUser) return null;
+  // Logged into Clerk but no role assigned yet — treat as unauthenticated.
+  // (Shouldn't happen in normal use: accounts are only created via the
+  // Settings "Create user" flow, which sets metadata at creation time.)
+  if (!metadata.role) return null;
+
+  const email = sessionClaims?.email as string | undefined;
+  const name =
+    metadata.name ||
+    [sessionClaims?.firstName, sessionClaims?.lastName].filter(Boolean).join(" ") ||
+    email ||
+    "Unnamed";
 
   return {
-    id: appUser.id,
-    clerkId: appUser.clerkId,
-    email: appUser.email,
-    name: appUser.name,
-    role: appUser.role,
-    clientId: appUser.clientId,
+    id: userId,
+    clerkId: userId,
+    email: email ?? "",
+    name,
+    role: metadata.role,
+    clientId: metadata.clientId ?? null,
+    clientSlug: metadata.clientSlug ?? null,
   };
 });
 

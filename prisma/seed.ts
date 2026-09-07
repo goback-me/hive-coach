@@ -52,18 +52,20 @@ async function main() {
 
   // A little revenue history so the 12-month chart isn't flat
   const now = new Date();
+  const revenueClient = await prisma.client.findFirst({ where: { slug: "ad-empire" } });
   for (let i = 0; i < 12; i++) {
     const month = new Date(now.getFullYear(), now.getMonth() - i, 15);
-    const amount = 5000 + Math.round(Math.random() * 15000) + i * 800;
-    const client = await prisma.client.findFirst({ where: { slug: "ad-empire" } });
-    if (client) {
+    const amount = 5000 + Math.round(Math.random() * 15000) + (11 - i) * 800;
+    if (revenueClient) {
+      const monthStart = new Date(month.getFullYear(), month.getMonth(), 1);
+      const monthEnd = new Date(month.getFullYear(), month.getMonth() + 1, 1);
       const existing = await prisma.payment.findFirst({
-        where: { clientId: client.id, paidDate: { gte: new Date(month.getFullYear(), month.getMonth(), 1) } },
+        where: { clientId: revenueClient.id, paidDate: { gte: monthStart, lt: monthEnd } },
       });
       if (!existing) {
         await prisma.payment.create({
           data: {
-            clientId: client.id,
+            clientId: revenueClient.id,
             label: "Monthly retainer",
             amountDue: amount,
             dueDate: month,
@@ -140,13 +142,96 @@ async function main() {
     await prisma.awardTier.create({ data: { name: "$200K", subtitle: "Sovereign", thresholdRevenue: 200000, order: 2 } });
   }
 
-  // Sample ad campaign for the demo client
+  // ── "Ad Empire" is the fully-populated showcase client — every tab on
+  // its client-detail page should render real content, not an empty state.
   const adEmpire = await prisma.client.findFirst({ where: { slug: "ad-empire" } });
   if (adEmpire) {
-    const existingCampaign = await prisma.adCampaign.findFirst({ where: { clientId: adEmpire.id } });
-    if (!existingCampaign) {
+    const firstCampaign = await prisma.adCampaign.findFirst({ where: { clientId: adEmpire.id, name: "IG Story Ads — Q1" } });
+    if (!firstCampaign) {
       await prisma.adCampaign.create({
         data: { clientId: adEmpire.id, name: "IG Story Ads — Q1", status: "active", spend: 1240, impressions: 48200, profileVisits: 890, engagement: 210, saves: 34 },
+      });
+    }
+    // A second, already-synced campaign so AdsPanel/MetaAdsCard show a
+    // connected state instead of the "not synced yet" empty banner.
+    const secondCampaign = await prisma.adCampaign.findFirst({ where: { clientId: adEmpire.id, name: "Meta Feed Ads — Retargeting" } });
+    if (!secondCampaign) {
+      await prisma.adCampaign.create({
+        data: {
+          clientId: adEmpire.id,
+          name: "Meta Feed Ads — Retargeting",
+          status: "active",
+          spend: 3120,
+          impressions: 112400,
+          profileVisits: 2140,
+          engagement: 560,
+          saves: 91,
+          syncedAt: new Date(),
+        },
+      });
+    }
+
+    // Dashboard tab — Leads card, so it isn't empty on first load. Checked by
+    // externalKey: null (only these 5 fake rows have that — every real
+    // sheet-synced lead always gets one), not a plain count, since a real
+    // sync populates hundreds/thousands of rows for this same client and
+    // would otherwise make this look "already seeded" forever.
+    const existingDemoLeads = await prisma.lead.count({ where: { clientId: adEmpire.id, externalKey: null } });
+    if (existingDemoLeads === 0) {
+      // daysAgo marks each stage the lead has passed through so far (in days
+      // before now) — omitted stages stay null, matching real funnel data
+      // where a lead may not have reached every stage yet.
+      const leadSamples = [
+        { source: "Instagram DM", campaign: "IG Story Ads — Q1", status: "NEW_LEAD" as const, value: null, daysAgo: 1 },
+        { source: "Website form", campaign: "Meta Feed Ads — Retargeting", status: "CHASE_UP" as const, value: null, daysAgo: 3, chaseUpDaysAgo: 2 },
+        { source: "Referral", campaign: null, status: "CLIENT_CONTACTED" as const, value: 1200, daysAgo: 5, chaseUpDaysAgo: 4, contactedDaysAgo: 3 },
+        { source: "Facebook Ad", campaign: "IG Story Ads — Q1", status: "WON" as const, value: 3400, daysAgo: 9, chaseUpDaysAgo: 8, contactedDaysAgo: 6, closedDaysAgo: 2 },
+        { source: "Cold outreach", campaign: "Meta Feed Ads — Retargeting", status: "LOST" as const, value: null, daysAgo: 14, chaseUpDaysAgo: 13, contactedDaysAgo: 10, closedDaysAgo: 5 },
+      ];
+      for (const l of leadSamples) {
+        const daysAgo = (n?: number) => (n != null ? new Date(Date.now() - n * 86400000) : null);
+        await prisma.lead.create({
+          data: {
+            clientId: adEmpire.id,
+            source: l.source,
+            campaign: l.campaign,
+            status: l.status,
+            value: l.value,
+            chaseUpAt: daysAgo(l.chaseUpDaysAgo),
+            contactedAt: daysAgo(l.contactedDaysAgo),
+            closedAt: daysAgo(l.closedDaysAgo),
+            createdAt: new Date(Date.now() - l.daysAgo * 86400000),
+          },
+        });
+      }
+    }
+
+    // Gameplan tab — a placeholder Drive link so it shows populated state.
+    if (!adEmpire.gameplanFigmaLink) {
+      await prisma.client.update({
+        where: { id: adEmpire.id },
+        data: { gameplanFigmaLink: "https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQrStUvWxYz0123456/view" },
+      });
+    }
+
+    // Onboarding tab — partial progress (first 3 of 5 steps done).
+    const onboardingSteps = await prisma.onboardingStepTemplate.findMany({ orderBy: { order: "asc" }, take: 3 });
+    for (const step of onboardingSteps) {
+      await prisma.clientOnboardingStep.upsert({
+        where: { clientId_templateId: { clientId: adEmpire.id, templateId: step.id } },
+        update: {},
+        create: { clientId: adEmpire.id, templateId: step.id, completedAt: new Date() },
+      });
+    }
+
+    // Playbooks tab — a couple of completed lessons.
+    const modulesWithLessons = await prisma.module.findMany({ orderBy: { order: "asc" }, include: { lessons: { orderBy: { order: "asc" } } } });
+    const allLessons = modulesWithLessons.flatMap((m) => m.lessons);
+    for (const lesson of allLessons.slice(0, 2)) {
+      await prisma.clientLessonProgress.upsert({
+        where: { clientId_lessonId: { clientId: adEmpire.id, lessonId: lesson.id } },
+        update: {},
+        create: { clientId: adEmpire.id, lessonId: lesson.id, completedAt: new Date() },
       });
     }
   }

@@ -19,8 +19,8 @@ export default function AddClientModal({
     <>
       <button
         onClick={() => setOpen(true)}
-        className="flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm"
-        style={{ background: "var(--secondary)", color: "#14150f" }}
+        className="flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm btn-cta"
+        style={{ background: "var(--secondary)", color: "#fff" }}
       >
         <span className="material-symbols-outlined text-[18px]">add</span>
         Add Client
@@ -93,7 +93,7 @@ export default function AddClientModal({
                 <button type="button" onClick={() => setOpen(false)} className="px-4 py-2 rounded-lg text-sm font-semibold" style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
                   Cancel
                 </button>
-                <button type="submit" className="px-4 py-2 rounded-lg text-sm font-bold" style={{ background: "var(--secondary)", color: "#14150f" }}>
+                <button type="submit" className="px-4 py-2 rounded-lg text-sm font-bold btn-cta" style={{ background: "var(--secondary)", color: "#fff" }}>
                   Create client
                 </button>
               </div>

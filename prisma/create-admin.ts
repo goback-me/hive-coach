@@ -55,8 +55,18 @@ async function main() {
       firstName,
       lastName,
       skipPasswordChecks: false,
+      // Required by middleware.ts/lib/auth.ts, which read role straight off
+      // the Clerk session's publicMetadata rather than hitting Prisma.
+      publicMetadata: { role: "COACH", name },
     });
   }
+
+  // Set/refresh publicMetadata even for a pre-existing Clerk account — an
+  // earlier partial run (or a manually-created account) may not have it,
+  // which otherwise sends the coach to /login?error=no-access.
+  await clerk.users.updateUserMetadata(clerkUser.id, {
+    publicMetadata: { role: "COACH", name },
+  });
 
   await prisma.user.create({
     data: { clerkId: clerkUser.id, email, name, role: "COACH", clientId: null },

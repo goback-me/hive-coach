@@ -20,7 +20,7 @@ export default async function NotFound() {
       ? [
           { href: "/dashboard", icon: "space_dashboard", label: "Dashboard" },
           { href: "/clients", icon: "diversity_3", label: "Clients" },
-          { href: "/sessions", icon: "event", label: "Sessions" },
+          { href: "/leads", icon: "person_search", label: "Leads" },
           { href: "/settings", icon: "settings", label: "Settings" },
         ]
       : [];
@@ -45,7 +45,7 @@ export default async function NotFound() {
         <Link
           href={primaryHref}
           className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold mb-8"
-          style={{ background: "var(--primary)", color: "#0d0d0b" }}
+          style={{ background: "var(--primary)", color: "#fff" }}
         >
           <span className="material-symbols-outlined text-[18px]">arrow_back</span>
           {primaryLabel}

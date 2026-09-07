@@ -13,8 +13,8 @@ export default function AddReferralModal({ action }: { action: (formData: FormDa
     <>
       <button
         onClick={() => setOpen(true)}
-        className="flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm"
-        style={{ background: "var(--secondary)", color: "#14150f" }}
+        className="flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm btn-cta"
+        style={{ background: "var(--secondary)", color: "#fff" }}
       >
         <span className="material-symbols-outlined text-[18px]">add</span>
         Add Referral
@@ -54,7 +54,7 @@ export default function AddReferralModal({ action }: { action: (formData: FormDa
               </div>
               <div className="flex justify-end gap-2 pt-2">
                 <button type="button" onClick={() => setOpen(false)} className="px-4 py-2 rounded-lg text-sm font-semibold" style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}>Cancel</button>
-                <button type="submit" className="px-4 py-2 rounded-lg text-sm font-bold" style={{ background: "var(--secondary)", color: "#14150f" }}>Add</button>
+                <button type="submit" className="px-4 py-2 rounded-lg text-sm font-bold btn-cta" style={{ background: "var(--secondary)", color: "#fff" }}>Add</button>
               </div>
             </form>
           </div>

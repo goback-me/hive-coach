@@ -38,7 +38,7 @@ export default function AwardsPanel({
               {earned && (
                 <div
                   className="absolute top-3 right-3 text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1"
-                  style={{ background: "var(--primary)", color: "#0d0d0b" }}
+                  style={{ background: "var(--primary)", color: "#fff" }}
                 >
                   <span className="material-symbols-outlined text-[12px]">check</span>
                   EARNED
@@ -53,7 +53,7 @@ export default function AwardsPanel({
               >
                 <span
                   className="material-symbols-outlined"
-                  style={{ fontSize: 32, color: earned ? "#0d0d0b" : "var(--text-muted)" }}
+                  style={{ fontSize: 32, color: earned ? "#fff" : "var(--text-muted)" }}
                 >
                   {earned ? "workspace_premium" : "lock"}
                 </span>

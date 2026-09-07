@@ -7,15 +7,21 @@ export default function ClientTabsShell({ tabs }: { tabs: { key: string; label: 
 
   return (
     <div>
-      <div className="flex gap-6 mb-6" style={{ borderBottom: "1px solid var(--border)" }}>
+      <div className="flex gap-8 mb-8" style={{ borderBottom: "1px solid var(--border)" }}>
         {tabs.map((t) => (
           <button
             key={t.key}
             onClick={() => setActive(t.key)}
-            className="pb-3 text-sm font-semibold"
+            className="pb-4 text-sm font-semibold transition-colors"
             style={{
               color: active === t.key ? "var(--primary)" : "var(--text-secondary)",
-              borderBottom: active === t.key ? "2px solid var(--primary)" : "2px solid transparent",
+              borderBottom: active === t.key ? "3px solid var(--primary)" : "3px solid transparent",
+            }}
+            onMouseEnter={(e) => {
+              if (active !== t.key) e.currentTarget.style.color = "var(--primary)";
+            }}
+            onMouseLeave={(e) => {
+              if (active !== t.key) e.currentTarget.style.color = "var(--text-secondary)";
             }}
           >
             {t.label}

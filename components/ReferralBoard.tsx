@@ -12,11 +12,11 @@ type Referral = {
 };
 
 const STAGES: { key: string; label: string; color: string }[] = [
-  { key: "INTRODUCED", label: "Introduced", color: "var(--text-secondary)" },
-  { key: "REACHED_OUT", label: "Reached Out", color: "#60a5fa" },
-  { key: "IN_CONVERSATION", label: "In Conversation", color: "#38bdf8" },
-  { key: "CALL_BOOKED", label: "Call Booked", color: "#facc15" },
-  { key: "CALL_DONE", label: "Call Done", color: "#fb923c" },
+  { key: "INTRODUCED", label: "Introduced", color: "var(--text-muted)" },
+  { key: "REACHED_OUT", label: "Reached Out", color: "var(--text-secondary)" },
+  { key: "IN_CONVERSATION", label: "In Conversation", color: "var(--border-strong)" },
+  { key: "CALL_BOOKED", label: "Call Booked", color: "var(--text-primary)" },
+  { key: "CALL_DONE", label: "Call Done", color: "var(--primary-hover)" },
   { key: "WON", label: "Won", color: "var(--primary)" },
 ];
 

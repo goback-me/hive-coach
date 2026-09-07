@@ -1,34 +1,31 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import {
   toggleOnboardingStep,
   saveGameplanLink,
   toggleLessonComplete,
-  createTask,
-  updateTaskStatus,
   createModule,
   createLesson,
-  saveTrackingWebsite,
-  verifyTrackingInstall,
-  getSwarmEmbedUrl,
+  createProgressNote,
+  syncClientLeads,
+  updateLeadStatus,
 } from "@/lib/actions";
-import { swarmEmbedSnippet } from "@/lib/swarm-config";
 import { requireClientAccess } from "@/lib/auth";
 import { checkAndGrantAwards } from "@/lib/awards";
+import { LEAD_STATUS_LABELS, LEAD_STATUS_STYLE } from "@/lib/lead-status";
+import { getClientCampaignFunnel } from "@/lib/lead-sync";
+import LeadsPanel from "@/components/LeadsPanel";
 import ClientTabsShell from "@/components/ClientTabsShell";
 import OnboardingChecklist from "@/components/OnboardingChecklist";
 import GameplanPanel from "@/components/GameplanPanel";
 import PlaybooksPanel from "@/components/PlaybooksPanel";
 import AdsPanel from "@/components/AdsPanel";
 import AwardsPanel from "@/components/AwardsPanel";
-import TrackingPanel from "@/components/TrackingPanel";
-import TaskList from "@/components/TaskList";
+import MetaAdsCard from "@/components/MetaAdsCard";
 
 // Forces this page to render fresh on every single request — no static
-// caching, no ISR. Without this, if Next.js ever treats this route as
-// cacheable for any reason, the embedUrl (with its 45-min token) could get
-// served stale indefinitely regardless of how many times the page is
-// reloaded, since the server would never actually re-run getSwarmEmbedUrl.
+// caching, no ISR.
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const fetchCache = "force-no-store";
@@ -42,7 +39,7 @@ export default async function ClientDetailPage({ params }: { params: { slug: str
 
   // A client login gets bounced to /dashboard (which redirects to their own
   // slug) if they try to view anyone else's page. A coach can view any client.
-  await requireClientAccess(client.id);
+  const viewer = await requireClientAccess(client.id);
 
   // Re-checks revenue/module thresholds against award tiers on every visit —
   // not just when a lesson gets toggled — so editing a tier's threshold or a
@@ -55,7 +52,6 @@ export default async function ClientDetailPage({ params }: { params: { slug: str
   const [
     revenueThisMonth,
     lifetimeRevenueAgg,
-    sessionsCount,
     onboardingTemplates,
     onboardingProgress,
     modules,
@@ -63,11 +59,12 @@ export default async function ClientDetailPage({ params }: { params: { slug: str
     campaigns,
     awardTiers,
     clientAwards,
-    tasks,
+    recentLeads,
+    progressNotes,
+    clientSheet,
   ] = await Promise.all([
     prisma.payment.aggregate({ _sum: { amountDue: true }, where: { clientId: client.id, status: "PAID", paidDate: { gte: monthStart } } }),
     prisma.payment.aggregate({ _sum: { amountDue: true }, where: { clientId: client.id, status: "PAID" } }),
-    prisma.session.count({ where: { clientId: client.id, status: "COMPLETED" } }),
     prisma.onboardingStepTemplate.findMany({ orderBy: { order: "asc" } }),
     prisma.clientOnboardingStep.findMany({ where: { clientId: client.id } }),
     prisma.module.findMany({ orderBy: { order: "asc" }, include: { lessons: { orderBy: { order: "asc" } } } }),
@@ -75,30 +72,148 @@ export default async function ClientDetailPage({ params }: { params: { slug: str
     prisma.adCampaign.findMany({ where: { clientId: client.id } }),
     prisma.awardTier.findMany({ orderBy: { order: "asc" } }),
     prisma.clientAward.findMany({ where: { clientId: client.id } }),
-    prisma.task.findMany({ where: { clientId: client.id }, orderBy: { dueDate: "asc" } }),
+    prisma.lead.findMany({ where: { clientId: client.id }, orderBy: { createdAt: "desc" }, take: 5 }),
+    prisma.progressNote.findMany({ where: { clientId: client.id }, orderBy: { createdAt: "desc" }, take: 5 }),
+    prisma.clientSheet.findUnique({ where: { clientId: client.id } }),
   ]);
+
+  const campaignFunnel = await getClientCampaignFunnel(client.id);
 
   const revThisMonth = Number(revenueThisMonth._sum.amountDue ?? 0);
   const lifetimeRevenue = Number(lifetimeRevenueAgg._sum.amountDue ?? 0);
   const totalSpend = campaigns.reduce((s, c) => s + Number(c.spend), 0);
   const profit = revThisMonth - totalSpend;
 
-  // Mints a fresh, short-lived, scoped token on every page load — nothing
-  // about this client's domain ever appears in a URL. Only bother calling
-  // Swarm at all once the install is actually verified.
-  const swarmEmbedUrl = client.trackingVerifiedAt ? await getSwarmEmbedUrl(client.id) : null;
+  const earnedTierIds = new Set(clientAwards.map((a) => a.awardTierId));
+  const nextTier = awardTiers.find((t) => !earnedTierIds.has(t.id) && t.thresholdRevenue);
+  const nextTierRemaining = nextTier ? Math.max(Number(nextTier.thresholdRevenue) - lifetimeRevenue, 0) : 0;
 
   const dashboardContent = (
-    <div>
-      <div className="grid grid-cols-4 gap-4 mb-4">
-        <StatCard label="Revenue this month" value={`$${revThisMonth.toLocaleString()}`} />
-        <StatCard label="Ad spend" value={`$${totalSpend.toLocaleString()}`} />
-        <StatCard label="Profit" value={`$${profit.toLocaleString()}`} />
-        <StatCard label="Lifetime revenue" value={`$${lifetimeRevenue.toLocaleString()}`} />
+    <div className="space-y-5">
+      <div className="grid grid-cols-4 gap-4">
+        <StatCard icon="payments" label="Revenue this month" value={`$${revThisMonth.toLocaleString()}`} />
+        <StatCard icon="ads_click" label="Ad spend" value={`$${totalSpend.toLocaleString()}`} />
+        <StatCard icon="trending_up" label="Profit" value={`$${profit.toLocaleString()}`} />
+        <StatCard icon="account_balance_wallet" label="Lifetime revenue" value={`$${lifetimeRevenue.toLocaleString()}`} />
       </div>
-      <div className="grid grid-cols-2 gap-4">
-        <StatCard label="Sessions completed" value={String(sessionsCount)} big />
-        <StatCard label="Active campaigns" value={String(campaigns.filter((c) => c.status === "active").length)} big />
+
+      <div className="grid grid-cols-3 gap-5">
+        {/* Main column — the day-to-day, coaching-relevant activity */}
+        <div className="col-span-2 space-y-5">
+          <div className="card rounded-2xl p-5">
+            <div className="flex justify-between items-center mb-4">
+              <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Leads</p>
+              <span className="text-xs" style={{ color: "var(--text-muted)" }}>{recentLeads.length} recent</span>
+            </div>
+            {recentLeads.length === 0 ? (
+              <p className="text-sm" style={{ color: "var(--text-secondary)" }}>No leads logged yet.</p>
+            ) : (
+              <div className="space-y-1">
+                {recentLeads.map((l) => {
+                  const st = LEAD_STATUS_STYLE[l.status];
+                  return (
+                    <div key={l.id} className="flex items-center justify-between py-2" style={{ borderBottom: "1px solid var(--border)" }}>
+                      <div className="flex items-center gap-3">
+                        <span className="icon-chip w-8 h-8" style={{ background: "var(--surface-hover)" }}>
+                          <span className="material-symbols-outlined text-[16px]" style={{ color: "var(--text-secondary)" }}>person_search</span>
+                        </span>
+                        <div>
+                          <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{l.source ?? l.campaign ?? "Unknown source"}</p>
+                          <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                            {l.createdAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                            {l.value ? ` · $${Number(l.value).toLocaleString()}` : ""}
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-bold px-2 py-1 rounded-full" style={{ background: st.bg, color: st.color }}>
+                        {LEAD_STATUS_LABELS[l.status]}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="card rounded-2xl p-5">
+            <p className="text-sm font-semibold mb-4" style={{ color: "var(--text-primary)" }}>Progress Notes</p>
+            {progressNotes.length === 0 ? (
+              <p className="text-sm mb-4" style={{ color: "var(--text-secondary)" }}>No notes yet — add one after a session.</p>
+            ) : (
+              <div className="space-y-4 mb-4">
+                {progressNotes.map((n) => (
+                  <div key={n.id} className="flex gap-3">
+                    <span className="icon-chip w-8 h-8 shrink-0" style={{ background: "var(--primary-tint)" }}>
+                      <span className="material-symbols-outlined text-[16px]" style={{ color: "var(--primary)" }}>edit_note</span>
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm" style={{ color: "var(--text-primary)" }}>{n.note}</p>
+                      <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+                        {n.createdBy} · {n.createdAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <form action={createProgressNote.bind(null, client.id)} className="flex gap-2 pt-3" style={{ borderTop: "1px solid var(--border)" }}>
+              <input
+                name="note"
+                required
+                placeholder="Add a note…"
+                style={{ flex: 1, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
+                className="px-3 py-2 rounded-lg outline-none text-sm"
+              />
+              <button type="submit" className="px-4 py-2 rounded-lg text-sm font-bold" style={{ background: "var(--primary)", color: "#fff" }}>
+                Add
+              </button>
+            </form>
+          </div>
+        </div>
+
+        {/* Side column — who they are + how close to the next milestone */}
+        <div className="space-y-5">
+          <div className="card rounded-2xl p-5">
+            <p className="text-sm font-semibold mb-4" style={{ color: "var(--text-primary)" }}>Client Details</p>
+            <dl className="space-y-3 text-sm">
+              <DetailRow icon="mail" label="Email" value={client.email ?? "—"} />
+              <DetailRow icon="school" label="Program" value={client.program?.name ?? "—"} />
+              <DetailRow icon="calendar_today" label="Joined" value={client.joinedAt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} />
+            </dl>
+          </div>
+
+          <div className="card rounded-2xl p-5">
+            <p className="text-sm font-semibold mb-4" style={{ color: "var(--text-primary)" }}>Goals</p>
+            <p className="text-sm" style={{ color: client.goals ? "var(--text-primary)" : "var(--text-secondary)" }}>
+              {client.goals || "No goals recorded yet."}
+            </p>
+          </div>
+
+          <div className="card rounded-2xl p-5">
+            <p className="text-sm font-semibold mb-4" style={{ color: "var(--text-primary)" }}>Awards Progress</p>
+            <p className="font-heading text-2xl font-bold" style={{ color: "var(--text-primary)" }}>
+              {clientAwards.length} <span className="text-sm font-normal" style={{ color: "var(--text-secondary)" }}>of {awardTiers.length} tiers earned</span>
+            </p>
+            {nextTier ? (
+              <>
+                <div className="h-2 rounded-full mt-3 mb-2" style={{ background: "var(--surface-hover)" }}>
+                  <div
+                    className="h-2 rounded-full"
+                    style={{
+                      width: `${Math.min((lifetimeRevenue / Number(nextTier.thresholdRevenue)) * 100, 100)}%`,
+                      background: "var(--primary)",
+                    }}
+                  />
+                </div>
+                <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                  ${nextTierRemaining.toLocaleString()} to <strong style={{ color: "var(--text-primary)" }}>{nextTier.name}</strong>
+                </p>
+              </>
+            ) : (
+              <p className="text-xs mt-2" style={{ color: "var(--text-secondary)" }}>All revenue-based tiers earned.</p>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -132,19 +247,24 @@ export default async function ClientDetailPage({ params }: { params: { slug: str
   );
 
   const adsContent = (
-    <AdsPanel
-      campaigns={campaigns.map((c) => ({
-        id: c.id,
-        name: c.name,
-        status: c.status,
-        spend: Number(c.spend),
-        impressions: c.impressions,
-        profileVisits: c.profileVisits,
-        engagement: c.engagement,
-        saves: c.saves,
-        syncedAt: c.syncedAt?.toISOString() ?? null,
-      }))}
-    />
+    <div className="space-y-6">
+      <AdsPanel
+        campaigns={campaigns.map((c) => ({
+          id: c.id,
+          name: c.name,
+          status: c.status,
+          spend: Number(c.spend),
+          impressions: c.impressions,
+          profileVisits: c.profileVisits,
+          engagement: c.engagement,
+          saves: c.saves,
+          syncedAt: c.syncedAt?.toISOString() ?? null,
+        }))}
+      />
+      {/* Hive OS — Meta Marketing API connection for this client, merged in
+          alongside Coach OS's own manually-tracked AdCampaign rows above. */}
+      <MetaAdsCard clientId={client.id} connected={Boolean(client.metaAdAccountId)} adAccountId={client.metaAdAccountId} />
+    </div>
   );
 
   const awardsContent = (
@@ -155,51 +275,39 @@ export default async function ClientDetailPage({ params }: { params: { slug: str
     />
   );
 
-  const tasksContent = (
-    <TaskList
-      initialTasks={tasks.map((t) => ({
-        id: t.id,
-        title: t.title,
-        status: t.status,
-        assignee: t.assignee,
-        dueDate: t.dueDate ? t.dueDate.toISOString() : null,
-        source: t.source,
-      }))}
+  const leadsContent = (
+    <LeadsPanel
       clientId={client.id}
-      onCreate={createTask}
-      onUpdateStatus={updateTaskStatus}
-      showClientColumn={false}
-    />
-  );
-
-  const trackingContent = (
-    <TrackingPanel
-      clientId={client.id}
-      websiteUrl={client.trackingWebsiteUrl}
-      isVerified={!!client.trackingVerifiedAt}
-      embedSnippet={swarmEmbedSnippet()}
-      embedUrl={swarmEmbedUrl}
-      onSaveWebsite={saveTrackingWebsite}
-      onVerify={verifyTrackingInstall}
+      viewerRole={viewer.role}
+      hasSheet={Boolean(clientSheet)}
+      funnel={campaignFunnel}
+      onSync={syncClientLeads}
+      onUpdateStatus={updateLeadStatus}
     />
   );
 
   return (
     <div className="p-10 max-w-[1500px] mx-auto">
-      <div className="flex items-center gap-4 mb-6">
-        <div className="w-14 h-14 rounded-2xl flex items-center justify-center font-bold text-xl" style={{ background: "var(--primary-tint)", color: "var(--primary)" }}>
+      <div className="flex items-center gap-1.5 text-sm mb-4">
+        <Link href="/clients" style={{ color: "var(--text-secondary)" }}>Clients</Link>
+        <span className="material-symbols-outlined text-[16px]" style={{ color: "var(--text-muted)" }}>chevron_right</span>
+        <span style={{ color: "var(--text-primary)" }} className="font-medium">{client.name}</span>
+      </div>
+
+      <div className="flex items-center gap-5 mb-8">
+        <div className="w-16 h-16 rounded-2xl flex items-center justify-center font-bold text-2xl" style={{ background: "var(--primary-tint)", color: "var(--primary)" }}>
           {client.name.slice(0, 1).toUpperCase()}
         </div>
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="font-heading text-2xl font-bold" style={{ color: "var(--text-primary)" }}>{client.name}</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="page-title font-heading" style={{ color: "var(--text-primary)" }}>{client.name}</h1>
             {client.program && (
               <span className="text-[10px] font-bold px-2 py-1 rounded" style={{ background: "var(--surface-hover)", color: "var(--text-secondary)" }}>
                 {client.program.name}
               </span>
             )}
           </div>
-          <p className="text-sm" style={{ color: "var(--text-secondary)" }}>Since {client.joinedAt.toLocaleDateString("en-US", { month: "short", year: "numeric" })}</p>
+          <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>Since {client.joinedAt.toLocaleDateString("en-US", { month: "short", year: "numeric" })}</p>
         </div>
       </div>
 
@@ -207,11 +315,10 @@ export default async function ClientDetailPage({ params }: { params: { slug: str
         tabs={[
           { key: "onboarding", label: "Onboarding", content: onboardingContent },
           { key: "dashboard", label: "Dashboard", content: dashboardContent },
+          { key: "leads", label: "Leads", content: leadsContent },
           { key: "gameplan", label: "Gameplan", content: gameplanContent },
           { key: "playbooks", label: "Playbooks", content: playbooksContent },
           { key: "ads", label: "Ads", content: adsContent },
-          { key: "tracking", label: "Tracking", content: trackingContent },
-          { key: "tasks", label: "Tasks", content: tasksContent },
           { key: "awards", label: "Awards", content: awardsContent },
         ]}
       />
@@ -219,11 +326,28 @@ export default async function ClientDetailPage({ params }: { params: { slug: str
   );
 }
 
-function StatCard({ label, value, big }: { label: string; value: string; big?: boolean }) {
+function DetailRow({ icon, label, value }: { icon: string; label: string; value: string }) {
+  return (
+    <div className="flex items-start gap-2.5">
+      <span className="material-symbols-outlined text-[16px] mt-0.5" style={{ color: "var(--text-muted)" }}>{icon}</span>
+      <div className="min-w-0">
+        <dt className="text-xs" style={{ color: "var(--text-muted)" }}>{label}</dt>
+        <dd className="font-medium truncate" style={{ color: "var(--text-primary)" }}>{value}</dd>
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ icon, label, value, big }: { icon: string; label: string; value: string; big?: boolean }) {
   return (
     <div className="card rounded-2xl p-5">
-      <p className="text-xs" style={{ color: "var(--text-secondary)" }}>{label}</p>
-      <p className={`font-heading font-bold mt-1 ${big ? "text-3xl" : "text-2xl"}`} style={{ color: "var(--text-primary)" }}>{value}</p>
+      <div className="flex justify-between items-start mb-3">
+        <p className="text-sm" style={{ color: "var(--text-secondary)" }}>{label}</p>
+        <span className="icon-chip w-8 h-8" style={{ background: "var(--primary-tint)" }}>
+          <span className="material-symbols-outlined text-[16px]" style={{ color: "var(--primary)" }}>{icon}</span>
+        </span>
+      </div>
+      <p className={`font-heading font-bold ${big ? "text-3xl" : "text-2xl"}`} style={{ color: "var(--text-primary)" }}>{value}</p>
     </div>
   );
 }

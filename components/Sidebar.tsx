@@ -8,9 +8,8 @@ import { SignOutButton } from "@clerk/nextjs";
 const COACH_NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: "space_dashboard" },
   { href: "/clients", label: "Clients", icon: "diversity_3" },
+  { href: "/leads", label: "Leads", icon: "person_search" },
   { href: "/referrals", label: "Referrals", icon: "share" },
-  { href: "/tasks", label: "Tasks", icon: "task_alt" },
-  { href: "/sessions", label: "Sessions", icon: "event" },
   { href: "/settings", label: "Settings", icon: "settings" },
 ];
 
@@ -34,7 +33,7 @@ export default function Sidebar({ user }: { user: { name: string; role: "COACH" 
         </div>
         <div>
           <h1 className="font-heading font-bold text-lg leading-none" style={{ color: "var(--text-primary)" }}>
-            Coach OS
+            Hive OS
           </h1>
           <p className="text-[10px] uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>
             Client Command
@@ -49,10 +48,22 @@ export default function Sidebar({ user }: { user: { name: string; role: "COACH" 
             <Link
               key={item.href}
               href={item.href}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-colors"
+              className="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all"
               style={{
                 color: active ? "var(--primary)" : "var(--text-secondary)",
-                background: active ? "var(--primary-tint)" : "transparent",
+                background: active ? "linear-gradient(90deg, var(--primary-tint), transparent)" : "transparent",
+              }}
+              onMouseEnter={(e) => {
+                if (!active) {
+                  e.currentTarget.style.background = "linear-gradient(90deg, var(--primary-tint), transparent)";
+                  e.currentTarget.style.color = "var(--primary)";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!active) {
+                  e.currentTarget.style.background = "transparent";
+                  e.currentTarget.style.color = "var(--text-secondary)";
+                }
               }}
             >
               <span className="material-symbols-outlined">{item.icon}</span>

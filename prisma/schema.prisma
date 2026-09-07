@@ -31,6 +31,22 @@ enum PaymentStatus {
   OVERDUE
 }
 
+// From Hive OS — richer payment typing (deposit/second/full/retainer),
+// kept alongside Coach OS's simpler `label` free-text field.
+enum PaymentType {
+  DEPOSIT
+  SECOND_PAYMENT
+  FULL_PAYMENT
+  RETAINER
+}
+
+enum ContractStatus {
+  ACTIVE
+  EXPIRING
+  EXPIRED
+  CANCELLED
+}
+
 enum TaskStatus {
   NOT_STARTED
   IN_PROGRESS
@@ -115,21 +131,24 @@ model ClientLessonProgress {
   @@unique([clientId, lessonId])
 }
 
-// ── Ads — schema ready for Meta Ads API / server-tracker sync ──────────
+// ── Ads (Coach OS) — lightweight per-post metrics, schema-ready for a
+// Meta Ads API / server-tracker sync. Kept alongside Hive OS's daily-spend
+// model below since they answer different questions (creative performance
+// vs. day-by-day spend/ROAS).
 model AdCampaign {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   clientId       String
-  client         Client   @relation(fields: [clientId], references: [id])
+  client         Client    @relation(fields: [clientId], references: [id])
   name           String
-  status         String   @default("active")
-  spend          Decimal  @default(0) @db.Decimal(10, 2)
-  impressions    Int      @default(0)
-  profileVisits  Int      @default(0)
-  engagement     Int      @default(0)
-  saves          Int      @default(0)
+  status         String    @default("active")
+  spend          Decimal   @default(0) @db.Decimal(10, 2)
+  impressions    Int       @default(0)
+  profileVisits  Int       @default(0)
+  engagement     Int       @default(0)
+  saves          Int       @default(0)
   metaCampaignId String?
   syncedAt       DateTime?
-  createdAt      DateTime @default(now())
+  createdAt      DateTime  @default(now())
 
   @@index([clientId])
 }
@@ -166,9 +185,172 @@ model IntegrationSettings {
   updatedAt      DateTime @updatedAt
 }
 
-// Auth lives in Clerk — this table is the app-side profile that maps a
-// Clerk account to a role and (for clients) the one Client record they're
-// allowed to see.
+// ── Google (Hive OS) — the one Google account used to read every
+// client's lead sheet. Singleton table — only ever one row, created/
+// replaced on connect. Not per-client OAuth.
+model GoogleAccountConnection {
+  id           String   @id @default(cuid())
+  accessToken  String   // encrypted at rest (see lib/crypto.ts)
+  refreshToken String   // encrypted at rest
+  expiresAt    DateTime
+  googleEmail  String?  // shown in the UI so you know which account is connected
+  connectedAt  DateTime @default(now())
+}
+
+// ── Which spreadsheet/tab/columns are assigned to each client (Hive OS) ──
+// Sticks until changed — no token here, just points at a sheet and is read
+// using the single GoogleAccountConnection above.
+model ClientSheet {
+  id              String   @id @default(cuid())
+  clientId        String   @unique
+  client          Client   @relation(fields: [clientId], references: [id])
+
+  spreadsheetId   String
+  spreadsheetName String?
+  sheetName       String
+
+  allColumns      String[]
+  visibleColumns  String[]
+  statusColumn    String?
+  // Maps the sheet's own free-text status values (whatever the team has
+  // been typing into statusColumn) to our fixed 6-status funnel — e.g.
+  // {"New": "NEW_LEAD", "Called": "CHASE_UP"}. Unmapped values default to
+  // NEW_LEAD on sync (see lib/lead-sync.ts).
+  statusMapping   Json?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+enum LeadStatus {
+  NEW_LEAD
+  CHASE_UP
+  CLIENT_CONTACTED
+  WON
+  LOST
+  DISQUALIFIED
+}
+
+// ── Leads (Hive OS) — synced from each client's assigned Google Sheet ───
+// (see lib/lead-sync.ts). The sheet is read-only forever: syncing refreshes
+// every field except `status` once a lead has been manually touched
+// (statusManuallySetAt set) — a manual status change never gets clobbered
+// by the next sync.
+model Lead {
+  id        String     @id @default(cuid())
+  clientId  String
+  client    Client     @relation(fields: [clientId], references: [id])
+  name      String?
+  phone     String?
+  email     String?
+  source    String?
+  campaign  String?
+  adset     String?
+  status    LeadStatus @default(NEW_LEAD)
+  value     Decimal?   @db.Decimal(10, 2)
+
+  // Stable identity across repeated syncs (normalized email/phone/name) —
+  // no DB-level unique constraint; matched via findFirst in lib/lead-sync.ts.
+  externalKey         String?
+  // Every other sheet column (residency status, visa, employment, car
+  // price/timeframe, address, ad creative, docs status, feedback, landing
+  // page, etc.), keyed by header name — display-only, nothing computes on it.
+  raw                 Json?
+  statusManuallySetAt DateTime?
+  lastSyncedAt        DateTime?
+
+  // First time this lead ever reached that stage (set once, never moved
+  // back or overwritten — see lib/lead-status.ts's stageTimestampPatch) —
+  // powers the per-lead timeline and the aggregate time-series chart.
+  chaseUpAt   DateTime?
+  contactedAt DateTime?
+  closedAt    DateTime? // first time it reached WON, LOST, or DISQUALIFIED
+
+  createdAt DateTime @default(now())
+  activity  LeadActivity[]
+
+  @@index([clientId, createdAt])
+  @@index([clientId, externalKey])
+}
+
+// Audit trail for manual status changes only (sync-assigned status on first
+// ingest isn't logged here — that's routine ingestion, not an "activity").
+// Powers the "Activity" list in a lead's expanded detail row.
+model LeadActivity {
+  id         String     @id @default(cuid())
+  leadId     String
+  lead       Lead       @relation(fields: [leadId], references: [id])
+  fromStatus LeadStatus
+  toStatus   LeadStatus
+  value      Decimal?   @db.Decimal(10, 2)
+  changedBy  String
+  changedAt  DateTime   @default(now())
+
+  @@index([leadId, changedAt])
+}
+
+// ── Contracts / renewals (Hive OS) — drives "renewal" needs-action cards ─
+model Contract {
+  id           String         @id @default(cuid())
+  clientId     String
+  client       Client         @relation(fields: [clientId], references: [id])
+  startDate    DateTime
+  endDate      DateTime
+  status       ContractStatus @default(ACTIVE)
+  monthlyValue Decimal        @db.Decimal(10, 2)
+  autoRenew    Boolean        @default(false)
+  createdAt    DateTime       @default(now())
+
+  @@index([status, endDate])
+}
+
+// ── Contact / call log (Hive OS) — drives "no call in N+ days" cards ────
+model ContactLog {
+  id          String   @id @default(cuid())
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id])
+  contactedAt DateTime
+  method      String   // "call", "email", "meeting"
+  notes       String?
+  loggedBy    String
+  createdAt   DateTime @default(now())
+
+  @@index([clientId, contactedAt])
+}
+
+// ── Ad spend, synced daily from Meta Marketing API (Hive OS) ────────────
+model AdSpendDaily {
+  id          String   @id @default(cuid())
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id])
+  date        DateTime
+  spend       Decimal  @db.Decimal(10, 2)
+  impressions Int      @default(0)
+  clicks      Int      @default(0)
+  source      String   @default("meta")
+
+  @@unique([clientId, date, source])
+  @@index([clientId, date])
+}
+
+// ── Revenue, synced from Stripe or manual entry (Hive OS) ────────────────
+model RevenueMonthly {
+  id        String   @id @default(cuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id])
+  month     DateTime
+  amount    Decimal  @db.Decimal(10, 2)
+  source    String   @default("manual")
+
+  @@unique([clientId, month])
+}
+
+// Auth lives in Clerk — this table is a read-model mirror of the account
+// (kept in sync by the Clerk webhook, see app/api/webhooks/clerk/route.ts).
+// The source of truth for role/clientId at request time is Clerk's
+// publicMetadata (see lib/auth.ts) — this table exists so pages can join
+// against a local User row (e.g. Settings → Team list) without an extra
+// Clerk API round trip.
 model User {
   id        String   @id @default(cuid())
   clerkId   String   @unique // maps to Clerk's user.id
@@ -222,36 +404,45 @@ model Program {
 }
 
 model Client {
-  id            String    @id @default(cuid())
-  name          String
-  slug          String    @unique
-  email         String?
-  isActive      Boolean      @default(true)
-  status        ClientStatus @default(ONBOARDING)
-  goals         String?
-  description   String?
-  programId     String?
-  program       Program?  @relation(fields: [programId], references: [id])
-  joinedAt      DateTime  @default(now())
+  id          String       @id @default(cuid())
+  name        String
+  slug        String       @unique
+  email       String?
+  isActive    Boolean      @default(true)
+  status      ClientStatus @default(ONBOARDING)
+  goals       String?
+  description String?
+  programId   String?
+  program     Program?     @relation(fields: [programId], references: [id])
+  joinedAt    DateTime     @default(now())
 
-  users         User[]
-  sessions      Session[]
-  progressNotes ProgressNote[]
-  payments      Payment[]
+  // ── Coach OS — coaching-business relations ──────────────────────────
+  users            User[]
+  sessions         Session[]
+  progressNotes    ProgressNote[]
+  payments         Payment[]
   needsActionItems NeedsActionItem[]
-  tasks         Task[]
-  onboardingSteps ClientOnboardingStep[]
-  lessonProgress ClientLessonProgress[]
-  adCampaigns   AdCampaign[]
-  awards        ClientAward[]
+  tasks            Task[]
+  onboardingSteps  ClientOnboardingStep[]
+  lessonProgress   ClientLessonProgress[]
+  adCampaigns      AdCampaign[]
+  awards           ClientAward[]
   gameplanFigmaLink String?
 
-  // Swarm tracking integration — Coach OS never shares a database with
-  // Swarm; the live dashboard is embedded via a short-lived scoped token
-  // (see lib/actions.ts getSwarmEmbedUrl), never by exposing this domain
-  // directly in any URL.
-  trackingWebsiteUrl String?
-  trackingVerifiedAt DateTime?
+  // ── Hive OS — agency connections / reporting relations ───────────────
+  logoUrl          String?
+  metaAdAccountId  String?          // "act_XXXXXXXXX" — not secret, safe to store plain
+  metaAccessToken  String?          // encrypted at rest (see lib/crypto.ts)
+  clickupListId    String?          // ClickUp list to embed for this client's tasks
+  claritySlug      String?          // Microsoft Clarity project slug
+  stripeCustomerId String?
+
+  contracts        Contract[]
+  contactLogs      ContactLog[]
+  adSpendDaily     AdSpendDaily[]
+  revenueMonthly   RevenueMonthly[]
+  leads            Lead[]
+  clientSheet      ClientSheet?
 }
 
 model Session {
@@ -278,22 +469,29 @@ model ProgressNote {
   @@index([clientId, createdAt])
 }
 
+// Merged: Coach OS's simple free-text `label` + Hive OS's typed `type`,
+// `amountPaid` and `stripeInvoiceId` for real payment-sync support.
 model Payment {
-  id         String        @id @default(cuid())
-  clientId   String
-  client     Client        @relation(fields: [clientId], references: [id])
-  label      String
-  amountDue  Decimal       @db.Decimal(10, 2)
-  dueDate    DateTime
-  status     PaymentStatus @default(PENDING)
-  paidDate   DateTime?
-  createdAt  DateTime      @default(now())
+  id              String        @id @default(cuid())
+  clientId        String
+  client          Client        @relation(fields: [clientId], references: [id])
+  type            PaymentType?  // optional — Coach OS rows won't have one
+  label           String
+  amountDue       Decimal       @db.Decimal(10, 2)
+  amountPaid      Decimal?      @db.Decimal(10, 2)
+  dueDate         DateTime
+  status          PaymentStatus @default(PENDING)
+  paidDate        DateTime?
+  stripeInvoiceId String?
+  createdAt       DateTime      @default(now())
 
   @@index([status, dueDate])
 }
 
-// Cached rules-engine output — overdue payments, upcoming/missed sessions,
-// no-contact — same pattern as Hive OS's Needs Action feed.
+// Cached rules-engine output — merged Coach OS (session/onboarding based)
+// and Hive OS (contract/contact-log based) checks feed the same table.
+// `amount` / `daysDelta` are Hive OS additions, left nullable so Coach OS's
+// checks (which don't have a dollar figure) can omit them.
 model NeedsActionItem {
   id          String   @id @default(cuid())
   clientId    String
@@ -302,6 +500,8 @@ model NeedsActionItem {
   severity    String
   title       String
   description String
+  amount      Decimal? @db.Decimal(10, 2)
+  daysDelta   Int?
   computedAt  DateTime @default(now())
 
   @@index([computedAt])

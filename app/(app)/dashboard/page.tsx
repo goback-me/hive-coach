@@ -4,20 +4,28 @@ import { getRevenueTrend } from "@/lib/dashboard-data";
 import { requireUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import RevenueChart from "@/components/RevenueChart";
 
 export const dynamic = "force-dynamic";
 
-const SEVERITY_STYLE: Record<string, { color: string; icon: string }> = {
-  danger: { color: "var(--danger)", icon: "refresh" },
-  success: { color: "var(--primary)", icon: "refresh" },
-  muted: { color: "var(--text-muted)", icon: "schedule" },
+const SEVERITY_STYLE: Record<string, { color: string; bg: string; icon: string }> = {
+  danger: { color: "var(--danger)", bg: "var(--danger-tint)", icon: "priority_high" },
+  success: { color: "var(--primary)", bg: "var(--primary-tint)", icon: "check_circle" },
+  muted: { color: "var(--text-secondary)", bg: "var(--surface-hover)", icon: "schedule" },
 };
 
 const STATUS_STYLE: Record<string, { bg: string; color: string; label: string }> = {
-  ACTIVE: { bg: "rgba(163,230,53,0.15)", color: "var(--primary)", label: "Active" },
-  ONBOARDING: { bg: "rgba(250,204,21,0.15)", color: "#facc15", label: "Onboarding" },
-  CHURNED: { bg: "rgba(248,113,113,0.15)", color: "var(--danger)", label: "Churned" },
+  ACTIVE: { bg: "var(--primary-tint)", color: "var(--primary)", label: "Active" },
+  ONBOARDING: { bg: "var(--surface-hover)", color: "var(--text-secondary)", label: "Onboarding" },
+  CHURNED: { bg: "var(--danger-tint)", color: "var(--danger)", label: "Churned" },
 };
+
+function greeting() {
+  const h = new Date().getHours();
+  if (h < 12) return "Good morning";
+  if (h < 18) return "Good afternoon";
+  return "Good evening";
+}
 
 export default async function DashboardPage() {
   const user = await requireUser();
@@ -41,21 +49,13 @@ export default async function DashboardPage() {
     take: 12,
   });
 
-  const maxRev = Math.max(...trend.map((t) => t.revenue), 1);
-  const chartW = 1000;
-  const chartH = 220;
-  const points = trend.map((t, i) => {
-    const x = (i / (trend.length - 1 || 1)) * chartW;
-    const y = chartH - (t.revenue / maxRev) * (chartH - 20) - 10;
-    return { x, y, ...t };
-  });
-  const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
-
   return (
-    <div className="p-10 max-w-[1400px] mx-auto space-y-8">
+    <div className="p-10 max-w-[1400px] mx-auto space-y-10">
       <div>
-        <h1 className="font-heading text-3xl font-bold" style={{ color: "var(--text-primary)" }}>Dashboard</h1>
-        <p style={{ color: "var(--text-secondary)" }}>Welcome back. Here's your overview.</p>
+        <h1 className="page-title font-heading" style={{ color: "var(--text-primary)" }}>
+          {greeting()}, {user.name.split(" ")[0]}.
+        </h1>
+        <p className="text-base mt-1" style={{ color: "var(--text-secondary)" }}>Here's how the agency is doing.</p>
       </div>
 
       <div className="grid grid-cols-4 gap-4">
@@ -76,8 +76,10 @@ export default async function DashboardPage() {
           {items.map((item) => {
             const s = SEVERITY_STYLE[item.severity] ?? SEVERITY_STYLE.muted;
             return (
-              <Link key={item.id} href={`/clients/${item.client.slug}`} className="card rounded-xl p-3 flex items-center gap-3 hover:shadow-md transition-shadow">
-                <span className="material-symbols-outlined text-[18px] shrink-0" style={{ color: s.color }}>{s.icon}</span>
+              <Link key={item.id} href={`/clients/${item.client.slug}`} className="card rounded-xl p-3 flex items-center gap-3">
+                <span className="icon-chip w-8 h-8" style={{ background: s.bg }}>
+                  <span className="material-symbols-outlined text-[16px]" style={{ color: s.color }}>{s.icon}</span>
+                </span>
                 <div className="min-w-0">
                   <p className="font-semibold text-sm truncate" style={{ color: "var(--text-primary)" }}>{item.title}</p>
                   <p className="text-xs truncate" style={{ color: s.color }}>{item.description}</p>
@@ -90,17 +92,7 @@ export default async function DashboardPage() {
 
       <div className="card rounded-2xl p-6">
         <div className="text-sm font-semibold mb-4" style={{ color: "var(--text-primary)" }}>Revenue (Last 12 Months)</div>
-        <div className="relative" style={{ height: chartH + 30 }}>
-          <svg width="100%" height={chartH} viewBox={`0 0 ${chartW} ${chartH}`} preserveAspectRatio="none">
-            <path d={linePath} fill="none" stroke="var(--secondary)" strokeWidth="2.5" />
-            {points.map((p, i) => (
-              <circle key={i} cx={p.x} cy={p.y} r="4" fill="var(--secondary)" />
-            ))}
-          </svg>
-          <div className="flex justify-between mt-2 text-[10px]" style={{ color: "var(--text-muted)" }}>
-            {trend.map((t) => <span key={t.label}>{t.label}</span>)}
-          </div>
-        </div>
+        <RevenueChart trend={trend} />
       </div>
 
       <div>
@@ -109,10 +101,10 @@ export default async function DashboardPage() {
           {clients.map((client) => {
             const s = STATUS_STYLE[client.status] ?? STATUS_STYLE.ONBOARDING;
             return (
-              <Link key={client.id} href={`/clients/${client.slug}`} className="card rounded-xl p-4 block hover:shadow-md transition-shadow">
+              <Link key={client.id} href={`/clients/${client.slug}`} className="card rounded-xl p-4 block">
                 <div className="flex justify-between items-start mb-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: "var(--primary-tint)", color: "var(--primary)" }}>
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold" style={{ background: "var(--primary-tint)", color: "var(--primary)" }}>
                       {client.name.slice(0, 1).toUpperCase()}
                     </div>
                     <div>
@@ -144,12 +136,14 @@ export default async function DashboardPage() {
 function KpiCard({ icon, label, value, delta, sub }: { icon: string; label: string; value: string; delta?: string; sub?: string }) {
   return (
     <div className="card rounded-2xl p-5">
-      <div className="flex justify-between items-start mb-2">
+      <div className="flex justify-between items-start mb-3">
         <p className="text-sm" style={{ color: "var(--text-secondary)" }}>{label}</p>
-        <span className="material-symbols-outlined text-[18px]" style={{ color: "var(--text-muted)" }}>{icon}</span>
+        <span className="icon-chip w-8 h-8" style={{ background: "var(--primary-tint)" }}>
+          <span className="material-symbols-outlined text-[16px]" style={{ color: "var(--primary)" }}>{icon}</span>
+        </span>
       </div>
       <div className="flex items-end justify-between">
-        <p className="font-heading text-2xl font-bold" style={{ color: "var(--text-primary)" }}>{value}</p>
+        <p className="font-heading text-3xl font-bold" style={{ color: "var(--text-primary)" }}>{value}</p>
         {delta && <span className="text-xs font-bold" style={{ color: "var(--primary)" }}>{delta}</span>}
       </div>
       {sub && <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>{sub}</p>}

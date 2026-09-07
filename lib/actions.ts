@@ -5,6 +5,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireCoach, requireClientAccess } from "@/lib/auth";
 import { getClerkAdminClient } from "@/lib/clerk-admin";
+import { syncLeadsFromSheet } from "@/lib/lead-sync";
+import { stageTimestampPatch } from "@/lib/lead-status";
 
 function slugify(name: string) {
   return name
@@ -126,7 +128,54 @@ export async function createOnboardingStepTemplate(formData: FormData) {
   revalidatePath("/settings");
 }
 
-// ── Gameplan (Figma embed) ───────────────────────────────────────────────
+// ── Progress notes — a coach or the client themselves can log one ────────
+export async function createProgressNote(clientId: string, formData: FormData) {
+  const user = await requireClientAccess(clientId);
+  const note = String(formData.get("note") || "").trim();
+  if (!note) throw new Error("Note can't be empty");
+  await prisma.progressNote.create({ data: { clientId, note, createdBy: user.name } });
+  revalidatePath(`/clients`);
+}
+
+// ── Leads tab — sync from the assigned Google Sheet + manual status edits ─
+export async function syncClientLeads(clientId: string) {
+  await requireClientAccess(clientId);
+  const summary = await syncLeadsFromSheet(clientId);
+  revalidatePath(`/clients`);
+  return summary;
+}
+
+// A manual status change never gets clobbered by a later sync (see
+// lib/lead-sync.ts) — statusManuallySetAt marks that this lead is now
+// coach/client-owned, not sheet-owned, for its status field only.
+export async function updateLeadStatus(leadId: string, status: string, value?: number) {
+  const lead = await prisma.lead.findUnique({ where: { id: leadId } });
+  if (!lead) throw new Error("Lead not found");
+  const user = await requireClientAccess(lead.clientId);
+
+  await prisma.leadActivity.create({
+    data: {
+      leadId,
+      fromStatus: lead.status,
+      toStatus: status as never,
+      value: value ?? null,
+      changedBy: user.name,
+    },
+  });
+
+  await prisma.lead.update({
+    where: { id: leadId },
+    data: {
+      status: status as never,
+      statusManuallySetAt: new Date(),
+      ...stageTimestampPatch(lead, status as never),
+      ...(value !== undefined ? { value } : {}),
+    },
+  });
+  revalidatePath(`/clients`);
+}
+
+// ── Gameplan (Drive embed) ───────────────────────────────────────────────
 export async function saveGameplanLink(clientId: string, formData: FormData) {
   await requireClientAccess(clientId);
   const link = String(formData.get("figmaLink") || "").trim();
@@ -239,6 +288,15 @@ export async function createUser(formData: FormData) {
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) throw new Error("A user with that email already exists");
 
+  // Needed for middleware/lib/auth.ts, which read role+clientSlug straight
+  // off the Clerk session's publicMetadata rather than hitting Prisma.
+  let clientSlug: string | null = null;
+  if (role === "CLIENT" && clientId) {
+    const client = await prisma.client.findUnique({ where: { id: clientId }, select: { slug: true } });
+    if (!client) throw new Error("Client not found");
+    clientSlug = client.slug;
+  }
+
   const tempPassword = randomCode(14);
   const clerk = await getClerkAdminClient();
 
@@ -259,6 +317,16 @@ export async function createUser(formData: FormData) {
       firstName,
       lastName,
       skipPasswordChecks: false,
+      // Set synchronously (rather than waiting on the Clerk webhook) so the
+      // very first request this person makes already carries role/clientId/
+      // clientSlug in their session claims — middleware.ts and lib/auth.ts
+      // both read straight off this instead of querying Prisma.
+      publicMetadata: {
+        role,
+        clientId: role === "CLIENT" ? clientId : undefined,
+        clientSlug: role === "CLIENT" ? clientSlug : undefined,
+        name,
+      },
     });
   } catch (e: unknown) {
     const message =
@@ -338,136 +406,5 @@ export async function updateSessionStatus(id: string, status: string) {
   revalidatePath("/clients");
 }
 
-// ── Swarm tracking integration ───────────────────────────────────────────
-// Coach OS never shares a database with Swarm and never sends Swarm's admin
-// credentials to any browser. Everything below either updates our own
-// `Client` row, or makes a server-to-server call to Swarm using
-// SWARM_DASHBOARD_USER/PASS (held only in this server's env).
-// SWARM_URL/swarmAuthHeader/normalizeDomain/swarmEmbedSnippet live in
-// lib/swarm-config.ts (not here) since swarmEmbedSnippet is a plain sync
-// string builder, and every export from a "use server" file must be async.
-// Import swarmEmbedSnippet from "@/lib/swarm-config" directly wherever it's
-// used — not re-exported from here.
-import { SWARM_URL, swarmAuthHeader, normalizeDomain } from "./swarm-config";
-
-/** Sets/updates the client's website URL. Doesn't touch Swarm — that only happens on verify. */
-export async function saveTrackingWebsite(clientId: string, formData: FormData) {
-  await requireClientAccess(clientId);
-
-  const websiteUrl = String(formData.get("websiteUrl") || "").trim();
-  if (!websiteUrl) throw new Error("Enter a website URL");
-  try {
-    new URL(websiteUrl);
-  } catch {
-    throw new Error("That doesn't look like a valid URL (include https://)");
-  }
-
-  await prisma.client.update({
-    where: { id: clientId },
-    data: { trackingWebsiteUrl: websiteUrl, trackingVerifiedAt: null },
-  });
-
-  revalidatePath("/clients");
-}
-
-/**
- * Calls Swarm's real POST /clients/verify — Swarm fetches the site
- * server-side, confirms the pixel script is actually there, and (only if
- * found) registers + marks the domain verified on its own side too.
- */
-export async function verifyTrackingInstall(clientId: string) {
-  await requireClientAccess(clientId);
-
-  const client = await prisma.client.findUnique({ where: { id: clientId }, select: { trackingWebsiteUrl: true } });
-  if (!client?.trackingWebsiteUrl) throw new Error("Add a website URL first");
-
-  const domain = normalizeDomain(client.trackingWebsiteUrl);
-
-  let result: {
-    verified: boolean;
-    checkedUrl?: string;
-    httpStatus?: number;
-    error?: string;
-    cacheDetected?: Record<string, string> | null;
-  };
-  try {
-    const res = await fetch(`${SWARM_URL}/clients/verify`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...swarmAuthHeader() },
-      body: JSON.stringify({ domain }),
-      signal: AbortSignal.timeout(15000),
-      cache: "no-store",
-    });
-    if (res.status === 401) throw new Error("Swarm rejected our credentials — check SWARM_DASHBOARD_USER/PASS");
-    if (!res.ok) throw new Error(`Swarm returned an unexpected error (HTTP ${res.status})`);
-    result = await res.json();
-  } catch (e) {
-    return {
-      verified: false,
-      error:
-        e instanceof Error && e.name === "TimeoutError"
-          ? "The site took too long to respond — it may be slow, blocking automated requests, or temporarily down. Try again."
-          : e instanceof Error
-            ? e.message
-            : "Couldn't reach Swarm to verify",
-    };
-  }
-  let hasReceivedData = false;
-  let visitorCount = 0;
-  if (result.verified) {
-    await prisma.client.update({ where: { id: clientId }, data: { trackingVerifiedAt: new Date() } });
-
-    // Script tag being present on the page doesn't prove it's actually
-    // firing — check whether Swarm has genuinely recorded any real traffic
-    // for this domain yet, as a second, stronger confirmation signal.
-    try {
-      const summaryRes = await fetch(`${SWARM_URL}/reports/summary?site=${encodeURIComponent(domain)}`, {
-        headers: swarmAuthHeader(),
-        cache: "no-store",
-        signal: AbortSignal.timeout(8000),
-      });
-      if (summaryRes.ok) {
-        const summary = await summaryRes.json();
-        visitorCount = Number(summary?.total_visitors) || 0;
-        hasReceivedData = visitorCount > 0;
-      }
-    } catch {
-      // Non-fatal — the script IS confirmed installed either way; this just
-      // couldn't confirm live data yet. Don't fail verification over it.
-    }
-  }
-
-  revalidatePath("/clients");
-  return { ...result, hasReceivedData, visitorCount };
-}
-
-/**
- * Mints a short-lived, opaque, single-purpose token scoped to exactly this
- * client's domain — this is what goes in the iframe src, NOT the domain
- * itself. Swarm resolves the real domain server-side on every request; the
- * token reveals nothing if intercepted, and expires in 45 minutes even if
- * never used. Called fresh on every Tracking-tab page render.
- */
-export async function getSwarmEmbedUrl(clientId: string): Promise<string | null> {
-  await requireClientAccess(clientId);
-
-  const client = await prisma.client.findUnique({ where: { id: clientId }, select: { trackingWebsiteUrl: true, trackingVerifiedAt: true } });
-  if (!client?.trackingWebsiteUrl || !client.trackingVerifiedAt) return null;
-
-  const domain = normalizeDomain(client.trackingWebsiteUrl);
-
-  try {
-    const res = await fetch(`${SWARM_URL}/embed/session`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...swarmAuthHeader() },
-      body: JSON.stringify({ domain }),
-      signal: AbortSignal.timeout(10000),
-      cache: "no-store",
-    });
-    if (!res.ok) return null;
-    const { token } = await res.json();
-    return `${SWARM_URL}/dashboard/swarm?embed_token=${encodeURIComponent(token)}`;
-  } catch {
-    return null;
-  }
-}
+// Swarm tracking integration removed along with the client-page Tracking
+// tab. lib/swarm-config.ts is no longer imported anywhere in this app.

@@ -24,37 +24,37 @@ html.fonts-loaded .material-symbols-outlined {
 }
 
 :root {
-  --surface: #fafaf8;
+  --surface: #ffffff;
   --surface-card: #ffffff;
-  --surface-hover: #f0f0ec;
-  --text-primary: #14150f;
-  --text-secondary: #6b6b60;
-  --text-muted: #9a9a8e;
-  --primary: #5c7a12;
-  --primary-hover: #4a6410;
-  --primary-tint: #eef7d6;
-  --secondary: #a3e635;
+  --surface-hover: #F5F5F7;
+  --text-primary: #1D1D1F;
+  --text-secondary: #86868B;
+  --text-muted: #A1A1A6;
+  --primary: #0071E3;
+  --primary-hover: #0077ED;
+  --primary-tint: #E8F2FE;
+  --secondary: #0071E3;      /* same as primary — no second accent hue */
   --danger: #dc2626;
   --danger-tint: #fee2e2;
-  --border: #e5e5df;
-  --border-strong: #cfcfc4;
+  --border: #D2D2D7;
+  --border-strong: #B8B8BD;
 }
 
 .dark {
-  --surface: #0d0d0b;
-  --surface-card: #161613;
-  --surface-hover: #1f1f1a;
-  --text-primary: #f5f5ef;
-  --text-secondary: #a3a396;
-  --text-muted: #6b6b60;
-  --primary: #a3e635;
-  --primary-hover: #bef264;
-  --primary-tint: #1f2e0a;
-  --secondary: #a3e635;
+  --surface: #000000;
+  --surface-card: #1D1D1F;
+  --surface-hover: #2C2C2E;
+  --text-primary: #F5F5F7;
+  --text-secondary: #A1A1A6;
+  --text-muted: #86868B;
+  --primary: #0071E3;
+  --primary-hover: #2B95FF;
+  --primary-tint: #0A2540;
+  --secondary: #0071E3;
   --danger: #f87171;
   --danger-tint: #3a1414;
-  --border: #262620;
-  --border-strong: #38382f;
+  --border: #2C2C2E;
+  --border-strong: #38383A;
 }
 
 @theme {
@@ -73,8 +73,8 @@ html.fonts-loaded .material-symbols-outlined {
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
 
-  --font-heading: 'Fraunces', serif;
-  --font-body: 'Inter', sans-serif;
+  --font-heading: "Inter", "SF Pro Text", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-body: "Inter", "SF Pro Text", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
 }
 
 body {
@@ -87,7 +87,98 @@ body {
 .card {
   background: var(--surface-card);
   border: 1px solid var(--border);
-  transition: background-color 0.2s ease, border-color 0.2s ease;
+  transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* ── Branding pass: soft gradient-on-hover, inspired by the Apple/Hive
+   Social reference shots — pill buttons and cards get a gradient sweep
+   and a gentle lift on hover instead of a flat color swap. Uses the
+   app's own --primary token, not a new palette. */
+.card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 40px -16px color-mix(in srgb, var(--primary) 30%, transparent), 0 4px 10px -4px color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+
+/* Big, confident page headline — the Apple Store "Store" treatment. */
+.page-title {
+  font-size: 2.5rem;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  font-weight: 700;
+}
+@media (min-width: 768px) {
+  .page-title { font-size: 3rem; }
+}
+
+/* Tinted icon chip — a rounded swatch behind a material icon, used in KPI
+   cards and status/needs-action rows instead of a bare colored glyph. */
+.icon-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.75rem;
+  flex-shrink: 0;
+}
+
+.btn-gradient {
+  position: relative;
+  background: var(--primary);
+  color: #fff;
+  overflow: hidden;
+  z-index: 0;
+  transition: transform 0.15s ease, box-shadow 0.2s ease;
+}
+.btn-gradient::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(135deg, var(--primary), var(--primary-hover));
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+.btn-gradient:hover::before {
+  opacity: 1;
+}
+.btn-gradient:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px -8px color-mix(in srgb, var(--primary) 55%, transparent);
+}
+
+/* Radial glow accent, echoing the hero-visual gradient tiles in the
+   reference designs — used behind icon badges / empty states. */
+.glow-tile {
+  background: radial-gradient(circle at 30% 30%, var(--primary-tint), var(--surface-hover) 70%);
+  transition: background 0.3s ease;
+}
+.glow-tile:hover {
+  background: radial-gradient(circle at 30% 30%, var(--primary-hover), var(--primary-tint) 70%);
+}
+
+/* Same gradient-on-hover treatment as .btn-gradient, but for the existing
+   CTA buttons across the app — keeps their base look, just adds the
+   hover sweep + lift. */
+.btn-cta {
+  position: relative;
+  overflow: hidden;
+  z-index: 0;
+  transition: transform 0.15s ease, box-shadow 0.2s ease;
+}
+.btn-cta::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(135deg, var(--primary), var(--primary-hover));
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+.btn-cta:hover::before {
+  opacity: 1;
+}
+.btn-cta:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px -8px color-mix(in srgb, var(--primary) 55%, transparent);
 }
 
 ::-webkit-scrollbar { width: 6px; }

@@ -78,7 +78,7 @@ export default function ReferralLinkManager({
                 style={{ flex: 1, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
                 className="px-3 py-2 rounded-lg outline-none text-sm"
               />
-              <button type="submit" className="px-4 py-2 rounded-lg text-sm font-bold" style={{ background: "var(--secondary)", color: "#14150f" }}>
+              <button type="submit" className="px-4 py-2 rounded-lg text-sm font-bold btn-cta" style={{ background: "var(--secondary)", color: "#fff" }}>
                 Create
               </button>
             </form>

@@ -7,9 +7,9 @@ import AddClientModal from "./AddClientModal";
 export const dynamic = "force-dynamic";
 
 const STATUS_STYLE: Record<string, { dot: string; bg: string; color: string; label: string }> = {
-  ACTIVE: { dot: "var(--primary)", bg: "rgba(163,230,53,0.15)", color: "var(--primary)", label: "Active" },
-  ONBOARDING: { dot: "#facc15", bg: "rgba(250,204,21,0.15)", color: "#facc15", label: "Onboarding" },
-  CHURNED: { dot: "var(--danger)", bg: "rgba(248,113,113,0.15)", color: "var(--danger)", label: "Churned" },
+  ACTIVE: { dot: "var(--primary)", bg: "var(--primary-tint)", color: "var(--primary)", label: "Active" },
+  ONBOARDING: { dot: "var(--text-secondary)", bg: "var(--surface-hover)", color: "var(--text-secondary)", label: "Onboarding" },
+  CHURNED: { dot: "var(--danger)", bg: "var(--danger-tint)", color: "var(--danger)", label: "Churned" },
 };
 
 export default async function ClientsPage() {
@@ -39,8 +39,8 @@ export default async function ClientsPage() {
     <div className="p-10 max-w-[1500px] mx-auto">
       <div className="flex justify-between items-start mb-8">
         <div>
-          <h1 className="font-heading text-3xl font-bold" style={{ color: "var(--text-primary)" }}>Clients</h1>
-          <p style={{ color: "var(--text-secondary)" }}>
+          <h1 className="page-title font-heading" style={{ color: "var(--text-primary)" }}>Clients</h1>
+          <p className="text-base mt-1" style={{ color: "var(--text-secondary)" }}>
             All clients across {programs.map((p) => p.name).join(", ")}.
           </p>
         </div>
@@ -61,14 +61,14 @@ export default async function ClientsPage() {
           const s = STATUS_STYLE[client.status] ?? STATUS_STYLE.ONBOARDING;
           const revenue = Number(revenueByClient[i]._sum.amountDue ?? 0);
           return (
-            <Link key={client.id} href={`/clients/${client.slug}`} className="card rounded-xl p-4 block hover:shadow-md transition-shadow relative">
+            <Link key={client.id} href={`/clients/${client.slug}`} className="card rounded-xl p-4 block relative">
               <span
                 className="absolute top-4 right-4 w-2.5 h-2.5 rounded-full"
                 style={{ background: s.dot }}
               />
               <div className="flex items-start gap-3 mb-4">
                 <div
-                  className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0"
+                  className="w-11 h-11 rounded-full flex items-center justify-center text-sm font-bold shrink-0"
                   style={{ background: "var(--primary-tint)", color: "var(--primary)" }}
                 >
                   {client.name.slice(0, 1).toUpperCase()}
