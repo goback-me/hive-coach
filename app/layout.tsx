@@ -3,7 +3,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
 
 export const metadata = {
-  title: "Hive OS",
+  title: "Coach OS",
   description: "Client command center for coaching businesses",
 };
 

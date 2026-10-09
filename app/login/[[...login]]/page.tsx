@@ -1,6 +1,14 @@
-import { SignIn } from "@clerk/nextjs";
+import { SignIn, SignOutButton } from "@clerk/nextjs";
 
-export default function LoginPage() {
+// Set by middleware.ts when a signed-in Clerk account has no role/client in publicMetadata.
+const ERRORS: Record<string, string> = {
+  "no-access": "Your account doesn't have access yet. Ask your coach to check your login, then sign in again.",
+  "no-client": "Your login isn't linked to a client yet. Ask your coach to fix it, then sign in again.",
+};
+
+export default function LoginPage({ searchParams }: { searchParams: { error?: string } }) {
+  const error = searchParams.error && ERRORS[searchParams.error];
+
   return (
     <div className="min-h-screen flex" style={{ background: "var(--surface)" }}>
       {/* Brand panel — hidden on narrow screens, the Apple-Store-style bold
@@ -21,7 +29,7 @@ export default function LoginPage() {
         </div>
         <div className="relative">
           <h1 className="font-heading font-bold text-white mb-4" style={{ fontSize: "3.25rem", lineHeight: 1.05, letterSpacing: "-0.02em" }}>
-            Hive OS
+            Coach OS
           </h1>
           <p className="text-lg max-w-md" style={{ color: "rgba(255,255,255,0.85)" }}>
             The client command center for coaching businesses — clients, revenue,
@@ -29,12 +37,23 @@ export default function LoginPage() {
           </p>
         </div>
         <div className="relative text-sm" style={{ color: "rgba(255,255,255,0.6)" }}>
-          © {new Date().getFullYear()} Hive OS
+          © {new Date().getFullYear()} Coach OS
         </div>
       </div>
 
       {/* Form panel */}
       <div className="flex-1 flex items-center justify-center p-6">
+        {/* Signed-in-but-no-role users get bounced here; <SignIn> renders nothing for them, so give them a way out. */}
+        {error ? (
+          <div className="max-w-sm text-center space-y-4">
+            <p className="text-sm" style={{ color: "var(--text-primary)" }}>{error}</p>
+            <SignOutButton redirectUrl="/login">
+              <button className="px-4 py-2 rounded-lg text-sm font-bold" style={{ background: "var(--primary)", color: "#fff" }}>
+                Sign out
+              </button>
+            </SignOutButton>
+          </div>
+        ) : (
         <SignIn
           path="/login"
           routing="path"
@@ -60,6 +79,7 @@ export default function LoginPage() {
             },
           }}
         />
+        )}
       </div>
     </div>
   );

@@ -273,7 +273,8 @@ export async function createClient(formData: FormData) {
 // Creates the Clerk account AND the app-side profile in one go. The temp
 // password is shown once on screen — the user should change it after first
 // login (Clerk's account settings UI handles that, not built here).
-export async function createUser(formData: FormData) {
+// Returns { error } instead of throwing: Next.js hides thrown messages in production builds.
+export async function createUser(formData: FormData): Promise<{ email: string; tempPassword: string } | { error: string }> {
   await requireCoach();
 
   const name = String(formData.get("name") || "").trim();
@@ -281,12 +282,12 @@ export async function createUser(formData: FormData) {
   const role = String(formData.get("role") || "CLIENT") as "COACH" | "CLIENT";
   const clientId = String(formData.get("clientId") || "") || null;
 
-  if (!name) throw new Error("Name is required");
-  if (!email) throw new Error("Email is required");
-  if (role === "CLIENT" && !clientId) throw new Error("A client user must be linked to a client");
+  if (!name) return { error: "Name is required" };
+  if (!email) return { error: "Email is required" };
+  if (role === "CLIENT" && !clientId) return { error: "A client user must be linked to a client" };
 
   const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) throw new Error("A user with that email already exists");
+  if (existing) return { error: "A user with that email already exists" };
 
   // Needed for middleware/lib/auth.ts, which read role+clientSlug straight
   // off the Clerk session's publicMetadata rather than hitting Prisma.
@@ -332,7 +333,8 @@ export async function createUser(formData: FormData) {
     const message =
       (e as { errors?: { message?: string }[] })?.errors?.[0]?.message ||
       (e instanceof Error ? e.message : "Failed to create the login");
-    throw new Error(message);
+    console.error("createUser: Clerk createUser failed", e);
+    return { error: message };
   }
 
   try {
@@ -348,8 +350,9 @@ export async function createUser(formData: FormData) {
   } catch (e) {
     // Roll back the Clerk account if the app-side profile fails, so we don't
     // end up with an orphaned login that has no role/client.
+    console.error("createUser: saving app user failed", e);
     await clerk.users.deleteUser(clerkUser.id);
-    throw e;
+    return { error: "Login was created but saving the profile failed - check the server logs" };
   }
 
   revalidatePath("/settings");
@@ -367,6 +370,21 @@ export async function deleteUser(userId: string) {
   await prisma.user.delete({ where: { id: userId } });
 
   revalidatePath("/settings");
+}
+
+/** Single-use Clerk sign-in token so a user can log in from a link without a password. */
+export async function createMagicLoginToken(userId: string): Promise<string> {
+  await requireCoach();
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new Error("User not found");
+
+  const clerk = await getClerkAdminClient();
+  const { token } = await clerk.signInTokens.createSignInToken({
+    userId: user.clerkId,
+    expiresInSeconds: 60 * 60 * 24 * 7,
+  });
+  return token;
 }
 
 // ── Sessions ──────────────────────────────────────────────────────────────

@@ -2,7 +2,7 @@
 
 import { useFormState } from "react-dom";
 import { useState } from "react";
-import { createUser, deleteUser } from "@/lib/actions";
+import { createMagicLoginToken, createUser, deleteUser } from "@/lib/actions";
 
 type UserRow = {
   id: string;
@@ -28,6 +28,17 @@ async function createUserAction(_prev: CreateUserState, formData: FormData): Pro
 export default function UsersPanel({ users, clients }: { users: UserRow[]; clients: ClientOption[] }) {
   const [state, formAction] = useFormState(createUserAction, null);
   const [role, setRole] = useState<"CLIENT" | "COACH">("CLIENT");
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  async function copyMagicLink(userId: string) {
+    try {
+      const ticket = await createMagicLoginToken(userId);
+      await navigator.clipboard.writeText(`${window.location.origin}/login/magic?ticket=${encodeURIComponent(ticket)}`);
+      setCopiedId(userId);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Couldn't create magic link");
+    }
+  }
 
   return (
     <section className="card rounded-2xl p-6">
@@ -49,15 +60,26 @@ export default function UsersPanel({ users, clients }: { users: UserRow[]; clien
                 {u.role === "COACH" ? "Coach (full access)" : `Client · ${u.clientName ?? "—"}`}
               </p>
             </div>
-            <form action={deleteUser.bind(null, u.id)}>
+            <div className="flex items-center gap-2">
               <button
-                type="submit"
+                type="button"
+                onClick={() => copyMagicLink(u.id)}
+                title="Single-use login link, valid 7 days"
                 className="text-xs font-semibold px-3 py-1.5 rounded-lg"
-                style={{ color: "var(--danger)", border: "1px solid var(--border-strong)" }}
+                style={{ color: "var(--text-primary)", border: "1px solid var(--border-strong)" }}
               >
-                Remove
+                {copiedId === u.id ? "Link copied!" : "Copy magic link"}
               </button>
-            </form>
+              <form action={deleteUser.bind(null, u.id)}>
+                <button
+                  type="submit"
+                  className="text-xs font-semibold px-3 py-1.5 rounded-lg"
+                  style={{ color: "var(--danger)", border: "1px solid var(--border-strong)" }}
+                >
+                  Remove
+                </button>
+              </form>
+            </div>
           </div>
         ))}
         {users.length === 0 && <p className="text-sm" style={{ color: "var(--text-secondary)" }}>No users yet.</p>}
