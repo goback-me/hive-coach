@@ -3,7 +3,9 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export default async function NotFound() {
-  const user = await getCurrentUser();
+  // 404s for paths the middleware matcher skips (e.g. a missing /favicon.ico) have no
+  // Clerk context, so auth() throws there — render the logged-out version instead.
+  const user = await getCurrentUser().catch(() => null);
 
   // A client gets sent back to their own page, not a coach-only dead end.
   let clientHomeHref: string | null = null;
