@@ -33,7 +33,7 @@ export default function Sidebar({ user }: { user: { name: string; role: "COACH" 
         </div>
         <div>
           <h1 className="font-heading font-bold text-lg leading-none" style={{ color: "var(--text-primary)" }}>
-            Coach OS
+            Hive OS
           </h1>
           <p className="text-[10px] uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>
             Client Command
