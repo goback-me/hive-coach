@@ -21,7 +21,7 @@ export default async function DashboardPage() {
   // a client login gets sent straight to their own portal instead.
   if (user.role === "CLIENT") {
     const client = await prisma.client.findUnique({ where: { id: user.clientId ?? "" }, select: { slug: true } });
-    redirect(client ? `/clients/${client.slug}` : "/login");
+    redirect(client ? `/clients/${client.slug}` : "/no-access");
   }
 
   // ponytail: rebuilt on every dashboard load (a few queries per client) — move to the cron if client count grows into the hundreds

@@ -40,10 +40,18 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   };
 });
 
-/** Require any logged-in user. Redirects to /login if not authenticated. */
+/**
+ * Require any logged-in user. Not signed in → /login. Signed in to Clerk but
+ * with no account in this app (e.g. an email nobody added in Settings) →
+ * /no-access, which explains it — sending them to /login would loop, because
+ * the sign-in page has nothing to show someone who is already signed in.
+ */
 export async function requireUser(): Promise<CurrentUser> {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  if (!user) {
+    const { userId } = await auth();
+    redirect(userId ? "/no-access" : "/login");
+  }
   return user;
 }
 
