@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { createTask, updateTaskStatus } from "@/lib/actions";
 import { requireCoach } from "@/lib/auth";
+import { getTasks } from "@/lib/tasks";
 import TaskList from "@/components/TaskList";
 
 export const dynamic = "force-dynamic";
@@ -8,28 +8,19 @@ export const dynamic = "force-dynamic";
 export default async function TasksPage() {
   await requireCoach(); // global cross-client task list; clients see their own tasks on their client page
 
-  const [tasks, clients] = await Promise.all([
-    prisma.task.findMany({ orderBy: { dueDate: "asc" }, include: { client: { select: { name: true } } } }),
+  const [tasks, clients, people] = await Promise.all([
+    getTasks(),
     prisma.client.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.user.findMany({ select: { name: true, role: true, clientId: true }, orderBy: { name: "asc" } }),
   ]);
 
-  const taskData = tasks.map((t) => ({
-    id: t.id,
-    title: t.title,
-    status: t.status,
-    assignee: t.assignee,
-    dueDate: t.dueDate ? t.dueDate.toISOString() : null,
-    source: t.source,
-    clientName: t.client?.name ?? null,
-  }));
-
   return (
-    <div className="p-10 max-w-[1500px] mx-auto">
+    <div className="p-4 md:p-10 max-w-[1500px] mx-auto">
       <div className="mb-6">
         <h1 className="font-heading text-3xl font-bold" style={{ color: "var(--text-primary)" }}>Tasks</h1>
-        <p style={{ color: "var(--text-secondary)" }}>Every task across every client and team member.</p>
+        <p style={{ color: "var(--text-secondary)" }}>What every client owes, what&apos;s overdue, and where they&apos;re waiting on you.</p>
       </div>
-      <TaskList initialTasks={taskData} clients={clients} onCreate={createTask} onUpdateStatus={updateTaskStatus} />
+      <TaskList tasks={tasks} clients={clients} people={people} isCoach />
     </div>
   );
 }

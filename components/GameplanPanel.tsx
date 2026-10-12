@@ -43,7 +43,7 @@ export default function GameplanPanel({
       {isValidFigma ? (
         <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid var(--border)", height: 600 }}>
           <iframe
-            src={`https://www.figma.com/embed?embed_host=coach-os&url=${encodeURIComponent(link)}`}
+            src={`https://www.figma.com/embed?embed_host=the-bakery&url=${encodeURIComponent(link)}`}
             style={{ width: "100%", height: "100%", border: "none" }}
             allowFullScreen
           />

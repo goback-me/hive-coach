@@ -76,7 +76,7 @@ export default function SessionList({
             await onCreate(fd);
             setShowForm(false);
           }}
-          className="card rounded-xl p-4 mb-4 grid grid-cols-4 gap-2"
+          className="card rounded-xl p-4 mb-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2"
         >
           {clientId && <input type="hidden" name="clientId" value={clientId} />}
           {!clientId && clients && (
@@ -139,7 +139,7 @@ export default function SessionList({
               return (
                 <tr key={s.id} style={{ borderBottom: "1px solid var(--border)" }}>
                   <td className="px-4 py-3" style={{ color: isPastDue ? "var(--danger)" : "var(--text-primary)" }}>
-                    {new Date(s.scheduledAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
+                    {new Date(s.scheduledAt).toLocaleString("en-AU", { timeZone: "Australia/Sydney", dateStyle: "medium", timeStyle: "short" })}
                   </td>
                   <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>{s.durationMin} min</td>
                   <td className="px-4 py-3">

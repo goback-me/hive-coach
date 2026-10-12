@@ -2,7 +2,7 @@
 
 import { useFormState } from "react-dom";
 import { useState } from "react";
-import { createMagicLoginToken, createUser, deleteUser } from "@/lib/actions";
+import { createMagicLoginToken, createUser, deleteUser, updateUser } from "@/lib/actions";
 
 type UserRow = {
   id: string;
@@ -29,6 +29,7 @@ export default function UsersPanel({ users, clients }: { users: UserRow[]; clien
   const [state, formAction] = useFormState(createUserAction, null);
   const [role, setRole] = useState<"CLIENT" | "COACH">("CLIENT");
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   async function copyMagicLink(userId: string) {
     try {
@@ -50,8 +51,11 @@ export default function UsersPanel({ users, clients }: { users: UserRow[]; clien
       </p>
 
       <div className="space-y-2 mb-5">
-        {users.map((u) => (
-          <div key={u.id} className="flex items-center justify-between rounded-lg p-3" style={{ background: "var(--surface)" }}>
+        {users.map((u) =>
+          editingId === u.id ? (
+            <EditUserRow key={u.id} user={u} onDone={() => setEditingId(null)} />
+          ) : (
+          <div key={u.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg p-3" style={{ background: "var(--surface)" }}>
             <div>
               <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
                 {u.name} <span style={{ color: "var(--text-muted)" }}>· {u.email}</span>
@@ -60,7 +64,15 @@ export default function UsersPanel({ users, clients }: { users: UserRow[]; clien
                 {u.role === "COACH" ? "Coach (full access)" : `Client · ${u.clientName ?? "—"}`}
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setEditingId(u.id)}
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg"
+                style={{ color: "var(--text-primary)", border: "1px solid var(--border-strong)" }}
+              >
+                Edit
+              </button>
               <button
                 type="button"
                 onClick={() => copyMagicLink(u.id)}
@@ -105,7 +117,7 @@ export default function UsersPanel({ users, clients }: { users: UserRow[]; clien
         </div>
       )}
 
-      <form action={formAction} className="grid grid-cols-2 gap-3">
+      <form action={formAction} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <input
           name="name" required placeholder="Full name"
           style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
@@ -138,12 +150,53 @@ export default function UsersPanel({ users, clients }: { users: UserRow[]; clien
         )}
         <button
           type="submit"
-          className="col-span-2 px-4 py-2 rounded-lg text-sm font-bold"
+          className="sm:col-span-2 px-4 py-2 rounded-lg text-sm font-bold"
           style={{ background: "var(--primary)", color: "#0d0d0b" }}
         >
           Create login
         </button>
       </form>
     </section>
+  );
+}
+// Inline edit of a login's name and email (Clerk is updated too).
+function EditUserRow({ user, onDone }: { user: UserRow; onDone: () => void }) {
+  const [name, setName] = useState(user.name);
+  const [email, setEmail] = useState(user.email);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const input = { background: "var(--surface-card)", border: "1px solid var(--border)", color: "var(--text-primary)" };
+
+  return (
+    <form
+      onSubmit={async (e) => {
+        e.preventDefault();
+        setSaving(true);
+        setError(null);
+        const r = await updateUser(user.id, name, email);
+        setSaving(false);
+        if (r.error) setError(r.error);
+        else onDone();
+      }}
+      className="rounded-lg p-3 space-y-2"
+      style={{ background: "var(--surface)", border: "1px solid var(--border-strong)" }}
+    >
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <input value={name} onChange={(e) => setName(e.target.value)} required placeholder="Full name" style={input} className="px-3 py-2 rounded-lg outline-none text-sm" />
+        <input value={email} onChange={(e) => setEmail(e.target.value)} required type="email" placeholder="Email" style={input} className="px-3 py-2 rounded-lg outline-none text-sm" />
+      </div>
+      <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+        {user.role === "COACH" ? "Coach" : `Client · ${user.clientName ?? "—"}`} — changing the email changes the address they sign in with.
+      </p>
+      {error && <p className="text-xs" style={{ color: "var(--danger)" }}>{error}</p>}
+      <div className="flex justify-end gap-2">
+        <button type="button" onClick={onDone} className="px-3 py-1.5 rounded-lg text-xs font-semibold" style={{ color: "var(--text-secondary)", border: "1px solid var(--border-strong)" }}>
+          Cancel
+        </button>
+        <button type="submit" disabled={saving} className="px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-60" style={{ background: "var(--secondary)", color: "#14150f" }}>
+          {saving ? "Saving…" : "Save"}
+        </button>
+      </div>
+    </form>
   );
 }

@@ -44,20 +44,37 @@ enum TaskSource {
 }
 
 model Task {
-  id            String     @id @default(cuid())
+  id            String        @id @default(cuid())
   title         String
-  status        TaskStatus @default(NOT_STARTED)
+  description   String? // what's required — shown to the client on their Tasks tab
+  status        TaskStatus    @default(NOT_STARTED)
   assignee      String?
   clientId      String?
-  client        Client?    @relation(fields: [clientId], references: [id])
+  client        Client?       @relation(fields: [clientId], references: [id])
   dueDate       DateTime?
-  source        TaskSource @default(MANUAL)
+  source        TaskSource    @default(MANUAL)
   clickupTaskId String?
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  comments      TaskComment[]
 
   @@index([status, dueDate])
   @@index([clientId])
+}
+
+// Comments/updates on a task — the coach <-> client thread.
+model TaskComment {
+  id         String   @id @default(cuid())
+  taskId     String
+  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  authorName String // snapshot, survives the login being deleted
+  authorRole UserRole
+  body       String
+  createdAt  DateTime @default(now())
+
+  @@index([taskId, createdAt])
 }
 
 // ── Onboarding template — global checklist, applied to every client ────
@@ -73,12 +90,12 @@ model OnboardingStepTemplate {
 }
 
 model ClientOnboardingStep {
-  id           String                  @id @default(cuid())
-  clientId     String
-  client       Client                  @relation(fields: [clientId], references: [id])
-  templateId   String
-  template     OnboardingStepTemplate  @relation(fields: [templateId], references: [id])
-  completedAt  DateTime?
+  id          String                 @id @default(cuid())
+  clientId    String
+  client      Client                 @relation(fields: [clientId], references: [id])
+  templateId  String
+  template    OnboardingStepTemplate @relation(fields: [templateId], references: [id])
+  completedAt DateTime?
 
   @@unique([clientId, templateId])
 }
@@ -92,14 +109,14 @@ model Module {
 }
 
 model Lesson {
-  id          String   @id @default(cuid())
-  moduleId    String
-  module      Module   @relation(fields: [moduleId], references: [id])
-  title       String
-  videoUrl    String?
-  content     String?
-  order       Int      @default(0)
-  createdAt   DateTime @default(now())
+  id        String   @id @default(cuid())
+  moduleId  String
+  module    Module   @relation(fields: [moduleId], references: [id])
+  title     String
+  videoUrl  String?
+  content   String?
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
 
   completions ClientLessonProgress[]
 }
@@ -117,32 +134,32 @@ model ClientLessonProgress {
 
 // ── Ads — schema ready for Meta Ads API / server-tracker sync ──────────
 model AdCampaign {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   clientId       String
-  client         Client   @relation(fields: [clientId], references: [id])
+  client         Client    @relation(fields: [clientId], references: [id])
   name           String
-  status         String   @default("active")
-  spend          Decimal  @default(0) @db.Decimal(10, 2)
-  impressions    Int      @default(0)
-  profileVisits  Int      @default(0)
-  engagement     Int      @default(0)
-  saves          Int      @default(0)
+  status         String    @default("active")
+  spend          Decimal   @default(0) @db.Decimal(10, 2)
+  impressions    Int       @default(0)
+  profileVisits  Int       @default(0)
+  engagement     Int       @default(0)
+  saves          Int       @default(0)
   metaCampaignId String?
   syncedAt       DateTime?
-  createdAt      DateTime @default(now())
+  createdAt      DateTime  @default(now())
 
   @@index([clientId])
 }
 
 // ── Awards — auto-granted on revenue milestones or course completion ───
 model AwardTier {
-  id                 String   @id @default(cuid())
-  name               String
-  subtitle           String?
-  thresholdRevenue   Decimal? @db.Decimal(10, 2)
-  requiredModuleId   String?
-  order              Int      @default(0)
-  clientAwards       ClientAward[]
+  id               String        @id @default(cuid())
+  name             String
+  subtitle         String?
+  thresholdRevenue Decimal?      @db.Decimal(10, 2)
+  requiredModuleId String?
+  order            Int           @default(0)
+  clientAwards     ClientAward[]
 }
 
 model ClientAward {
@@ -161,7 +178,7 @@ model IntegrationSettings {
   id             String   @id @default("singleton")
   clickupApiKey  String?
   clickupTeamId  String?
-  crmType        String?  // "ghl" | "spreadsheet"
+  crmType        String? // "ghl" | "spreadsheet"
   crmApiKeyOrUrl String?
   updatedAt      DateTime @updatedAt
 }
@@ -170,14 +187,15 @@ model IntegrationSettings {
 // Clerk account to a role and (for clients) the one Client record they're
 // allowed to see.
 model User {
-  id        String   @id @default(cuid())
-  clerkId   String   @unique // maps to Clerk's user.id
-  email     String   @unique
-  role      UserRole
-  name      String
-  clientId  String? // required for role=CLIENT, null for role=COACH (coach/admin sees everything)
-  client    Client?  @relation(fields: [clientId], references: [id])
-  createdAt DateTime @default(now())
+  id           String        @id @default(cuid())
+  clerkId      String        @unique // maps to Clerk's user.id
+  email        String        @unique
+  role         UserRole
+  name         String
+  clientId     String? // required for role=CLIENT, null for role=COACH (coach/admin sees everything)
+  client       Client?       @relation(fields: [clientId], references: [id])
+  createdAt    DateTime      @default(now())
+  taskComments TaskComment[]
 
   @@index([clientId])
 }
@@ -195,6 +213,8 @@ model ReferralLink {
   id        String     @id @default(cuid())
   code      String     @unique
   label     String
+  clientId  String?    @unique // set when it's a client's own link (their Referrals tab)
+  client    Client?    @relation(fields: [clientId], references: [id], onDelete: Cascade)
   createdAt DateTime   @default(now())
   referrals Referral[]
 }
@@ -222,28 +242,28 @@ model Program {
 }
 
 model Client {
-  id            String    @id @default(cuid())
-  name          String
-  slug          String    @unique
-  email         String?
-  isActive      Boolean      @default(true)
-  status        ClientStatus @default(ONBOARDING)
-  goals         String?
-  description   String?
-  programId     String?
-  program       Program?  @relation(fields: [programId], references: [id])
-  joinedAt      DateTime  @default(now())
+  id          String       @id @default(cuid())
+  name        String
+  slug        String       @unique
+  email       String?
+  isActive    Boolean      @default(true)
+  status      ClientStatus @default(ONBOARDING)
+  goals       String?
+  description String?
+  programId   String?
+  program     Program?     @relation(fields: [programId], references: [id])
+  joinedAt    DateTime     @default(now())
 
-  users         User[]
-  sessions      Session[]
-  progressNotes ProgressNote[]
-  payments      Payment[]
-  needsActionItems NeedsActionItem[]
-  tasks         Task[]
-  onboardingSteps ClientOnboardingStep[]
-  lessonProgress ClientLessonProgress[]
-  adCampaigns   AdCampaign[]
-  awards        ClientAward[]
+  users             User[]
+  sessions          Session[]
+  progressNotes     ProgressNote[]
+  payments          Payment[]
+  needsActionItems  NeedsActionItem[]
+  tasks             Task[]
+  onboardingSteps   ClientOnboardingStep[]
+  lessonProgress    ClientLessonProgress[]
+  adCampaigns       AdCampaign[]
+  awards            ClientAward[]
   gameplanFigmaLink String?
 
   // Swarm tracking integration — Coach OS never shares a database with
@@ -252,6 +272,18 @@ model Client {
   // directly in any URL.
   trackingWebsiteUrl String?
   trackingVerifiedAt DateTime?
+  sheet              ClientSheet?
+  googleConnection   GoogleAccountConnection?
+  leads              Lead[]
+  weeklyUpdates      WeeklyUpdate[]
+  referralLink       ReferralLink?
+  driveUrl           String? // Google Drive folder for the client's assets and course files
+  // Client-portal tabs this client doesn't see (coach still sees them). Swarm tracking is off until it's rolled out.
+  hiddenTabs         String[]                 @default(["tracking"])
+  // Meta (Facebook) Ads — connected per client on the Ads tab. Token is encrypted (lib/crypto.ts).
+  metaAdAccountId    String? // "act_123…"
+  metaAccountName    String?
+  metaAccessToken    String?
 }
 
 model Session {
@@ -279,15 +311,15 @@ model ProgressNote {
 }
 
 model Payment {
-  id         String        @id @default(cuid())
-  clientId   String
-  client     Client        @relation(fields: [clientId], references: [id])
-  label      String
-  amountDue  Decimal       @db.Decimal(10, 2)
-  dueDate    DateTime
-  status     PaymentStatus @default(PENDING)
-  paidDate   DateTime?
-  createdAt  DateTime      @default(now())
+  id        String        @id @default(cuid())
+  clientId  String
+  client    Client        @relation(fields: [clientId], references: [id])
+  label     String
+  amountDue Decimal       @db.Decimal(10, 2)
+  dueDate   DateTime
+  status    PaymentStatus @default(PENDING)
+  paidDate  DateTime?
+  createdAt DateTime      @default(now())
 
   @@index([status, dueDate])
 }
@@ -305,4 +337,102 @@ model NeedsActionItem {
   computedAt  DateTime @default(now())
 
   @@index([computedAt])
+}
+
+// ── Lead tracking (client's Google Sheet → Coach OS, read-only) ─────────
+
+// The Google account a client connected from their Leads tab — used to read their sheet (read-only).
+model GoogleAccountConnection {
+  id           String   @id @default(cuid())
+  clientId     String   @unique
+  client       Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  googleEmail  String?
+  accessToken  String // encrypted (lib/crypto.ts)
+  refreshToken String // encrypted
+  expiresAt    DateTime
+  scope        String?
+  connectedAt  DateTime @default(now())
+}
+
+model ClientSheet {
+  id               String    @id @default(cuid())
+  clientId         String    @unique
+  client           Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  spreadsheetId    String
+  spreadsheetName  String
+  sheetName        String
+  statusColumn     String? // the "Prospect Status" header
+  statusMapping    Json? // { normalized sheet value: LeadStage } — coach overrides for values the rules don't know
+  unmappedStatuses Json? // { normalized sheet value: row count } from the last sync
+  lastSyncedAt     DateTime?
+  lastSyncError    String?
+  createdAt        DateTime  @default(now())
+}
+
+// Coaching clients work their own leads, so one status column drives this:
+// Prospect Status. Order here is funnel order (see lib/lead-stages.ts).
+enum LeadStage {
+  NEW
+  CONTACTED
+  BOOKED
+  CANCELLED
+  NO_SHOW
+  ATTENDED
+  QUOTED
+  WON
+  LOST
+  DISQUALIFIED
+}
+
+model Lead {
+  id           String           @id @default(cuid())
+  clientId     String
+  client       Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  name         String?
+  phone        String?
+  email        String?
+  source       String?
+  campaign     String?
+  stage        LeadStage        @default(NEW)
+  statusRaw    String? // Prospect Status exactly as typed in the sheet
+  value        Decimal?         @db.Decimal(12, 2) // quote / job value; revenue once WON
+  optInAt      DateTime? // when the lead came in, from the sheet — never the sync time
+  externalKey  String // email|phone|name identity used to match rows across syncs
+  raw          Json? // every sheet column by header, for the lead detail view
+  deletedAt    DateTime? // row removed from the sheet; restored if it reappears
+  lastSyncedAt DateTime?
+  createdAt    DateTime         @default(now())
+  stageEvents  LeadStageEvent[]
+
+  @@index([clientId, deletedAt])
+}
+
+// When a lead first reached each funnel step — drives Growth's month-by-month counts.
+model LeadStageEvent {
+  id       String    @id @default(cuid())
+  leadId   String
+  lead     Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  stage    LeadStage
+  at       DateTime
+  inferred Boolean   @default(false) // first import: dated from opt-in, not observed
+
+  @@unique([leadId, stage])
+  @@index([stage, at])
+}
+
+// The weekly coaching call write-up: what was covered and the next steps the client ticks off.
+model WeeklyUpdate {
+  id            String   @id @default(cuid())
+  clientId      String
+  client        Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  callDate      DateTime
+  summary       String
+  nextSteps     String[]
+  stepsDone     Int[] // indexes into nextSteps
+  internalNotes String? // coach only — never sent to a client login
+  createdBy     String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([clientId, callDate])
 }

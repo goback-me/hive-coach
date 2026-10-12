@@ -1,5 +1,5 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
-const isPublicRoute = createRouteMatcher(["/login(.*)", "/refer(.*)"]);
+const isPublicRoute = createRouteMatcher(["/login(.*)", "/refer(.*)", "/api/cron(.*)"]); // cron checks its own secret
 
 export default clerkMiddleware(async (auth, req) => {
   if (!isPublicRoute(req)) {

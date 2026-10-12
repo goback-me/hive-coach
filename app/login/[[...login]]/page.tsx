@@ -1,8 +1,10 @@
 import { SignIn } from "@clerk/nextjs";
+import { Wordmark } from "@/components/Logo";
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--surface)" }}>
+    <div className="min-h-screen flex flex-col items-center justify-center gap-6 p-4" style={{ background: "var(--surface)" }}>
+      <Wordmark size={48} />
       <SignIn
         path="/login"
         routing="path"

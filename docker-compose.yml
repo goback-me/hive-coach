@@ -38,7 +38,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=root_default"
-      - "traefik.http.routers.coach-os.rule=Host(`app.hivesocial.agency`)"
+      - "traefik.http.routers.coach-os.rule=Host(`thebakery.academy`) || Host(`www.thebakery.academy`)"
       - "traefik.http.routers.coach-os.entrypoints=web,websecure"
       - "traefik.http.routers.coach-os.tls=true"
       - "traefik.http.routers.coach-os.tls.certresolver=mytlschallenge"

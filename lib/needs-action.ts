@@ -1,6 +1,6 @@
 import { prisma } from "./prisma";
 
-const UPCOMING_SESSION_WINDOW_DAYS = 3;
+const UPCOMING_SESSION_WINDOW_DAYS = 7;
 const NO_CONTACT_DAYS = 14;
 
 function daysBetween(a: Date, b: Date) {
@@ -43,7 +43,7 @@ export async function computeNeedsAction() {
         type: "missed_session",
         severity: "danger",
         title: client.name,
-        description: `Session on ${s.scheduledAt.toLocaleDateString()} was never marked complete`,
+        description: `Session on ${s.scheduledAt.toLocaleDateString("en-AU", { timeZone: "Australia/Sydney" })} was never marked complete`,
       });
     }
 
@@ -56,13 +56,13 @@ export async function computeNeedsAction() {
       orderBy: { scheduledAt: "asc" },
     });
     if (upcoming) {
-      const daysUntil = daysBetween(upcoming.scheduledAt, now);
+      const when = upcoming.scheduledAt.toLocaleString("en-AU", { timeZone: "Australia/Sydney", weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
       items.push({
         clientId: client.id,
         type: "upcoming_session",
         severity: "success",
         title: client.name,
-        description: daysUntil === 0 ? "Session today" : `Session in ${daysUntil}d`,
+        description: `Call ${when}`,
       });
     }
 

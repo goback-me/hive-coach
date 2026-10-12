@@ -11,9 +11,10 @@
     "create-admin": "tsx prisma/create-admin.ts"
   },
   "dependencies": {
-    "@clerk/nextjs": "^6.9.6",
     "@clerk/backend": "^1.18.0",
+    "@clerk/nextjs": "^6.9.6",
     "@prisma/client": "^5.20.0",
+    "dompurify": "^3.4.16",
     "next": "14.2.25",
     "react": "^18",
     "react-dom": "^18"

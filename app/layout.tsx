@@ -3,7 +3,8 @@ import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
 
 export const metadata = {
-  title: "Coach OS",
+  metadataBase: new URL("https://thebakery.academy"),
+  title: "The Bakery Academy",
   description: "Client command center for coaching businesses",
 };
 

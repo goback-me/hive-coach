@@ -1,7 +1,9 @@
 import { prisma } from "@/lib/prisma";
-import { saveIntegrationSettings, createOnboardingStepTemplate, createModule, createLesson } from "@/lib/actions";
+import { saveIntegrationSettings, createOnboardingStepTemplate, createModule } from "@/lib/actions";
 import { requireCoach } from "@/lib/auth";
 import UsersPanel from "./UsersPanel";
+import { LessonForm } from "@/components/PlaybooksPanel";
+import { ModuleEditor, StepEditor } from "@/components/SettingsEditors";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +14,7 @@ export default async function SettingsPage() {
     prisma.integrationSettings.findUnique({ where: { id: "singleton" } }),
     prisma.onboardingStepTemplate.findMany({ orderBy: { order: "asc" } }),
     prisma.awardTier.findMany({ orderBy: { order: "asc" } }),
-    prisma.module.findMany({ orderBy: { order: "asc" }, include: { lessons: true } }),
+    prisma.module.findMany({ orderBy: { order: "asc" }, include: { lessons: { orderBy: { order: "asc" } } } }),
     prisma.user.findMany({ orderBy: { createdAt: "asc" }, include: { client: { select: { name: true } } } }),
     prisma.client.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
@@ -26,7 +28,7 @@ export default async function SettingsPage() {
   }));
 
   return (
-    <div className="p-10 max-w-[1000px] mx-auto space-y-8">
+    <div className="p-4 md:p-10 max-w-[1000px] mx-auto space-y-8">
       <div>
         <h1 className="font-heading text-3xl font-bold" style={{ color: "var(--text-primary)" }}>Settings</h1>
         <p style={{ color: "var(--text-secondary)" }}>Connections and templates used across every client.</p>
@@ -34,17 +36,14 @@ export default async function SettingsPage() {
 
       <UsersPanel users={userRows} clients={clients} />
 
+
       <section className="card rounded-2xl p-6">
         <h3 className="font-heading font-bold text-lg mb-1" style={{ color: "var(--text-primary)" }}>Integrations</h3>
         <p className="text-sm mb-4" style={{ color: "var(--text-secondary)" }}>
-          Connect ClickUp to sync tasks automatically, or keep using manual task entry — both work side by side.
+          Where client leads come from outside The Bakery.
         </p>
         <form action={saveIntegrationSettings} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="ClickUp API key" name="clickupApiKey" defaultValue={integration?.clickupApiKey ?? ""} placeholder="pk_..." />
-            <Field label="ClickUp Team ID" name="clickupTeamId" defaultValue={integration?.clickupTeamId ?? ""} placeholder="123456" />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="text-xs font-semibold block mb-1" style={{ color: "var(--text-secondary)" }}>CRM</label>
               <select
@@ -65,30 +64,24 @@ export default async function SettingsPage() {
           </button>
         </form>
         <p className="text-xs mt-3" style={{ color: "var(--text-muted)" }}>
-          Note: saving these keys stores them for future syncing — the actual ClickUp/GHL sync jobs aren't wired up yet, this just gets the connection ready.
+          Note: this stores the connection for later — the GoHighLevel sync isn't wired up yet. Google Sheets and Facebook Ads are connected per client on their Leads and Ads tabs.
         </p>
       </section>
 
       <section className="card rounded-2xl p-6">
         <h3 className="font-heading font-bold text-lg mb-1" style={{ color: "var(--text-primary)" }}>Onboarding template</h3>
         <p className="text-sm mb-4" style={{ color: "var(--text-secondary)" }}>
-          Every client gets this same checklist. Add steps once, applies to everyone.
+          Every client gets this same checklist. Click a step to edit or delete it.
         </p>
         <div className="space-y-2 mb-4">
           {onboardingSteps.map((s, i) => (
-            <div key={s.id} className="flex items-center gap-3 rounded-lg p-3" style={{ background: "var(--surface)" }}>
-              <span className="text-xs font-bold w-5" style={{ color: "var(--text-muted)" }}>{i + 1}</span>
-              <div>
-                <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{s.title}</p>
-                {s.description && <p className="text-xs" style={{ color: "var(--text-secondary)" }}>{s.description}</p>}
-              </div>
-            </div>
+            <StepEditor key={s.id} index={i} step={{ id: s.id, title: s.title, description: s.description }} />
           ))}
           {onboardingSteps.length === 0 && <p className="text-sm" style={{ color: "var(--text-secondary)" }}>No steps yet.</p>}
         </div>
-        <form action={createOnboardingStepTemplate} className="flex gap-2">
-          <input name="title" required placeholder="Step title" style={{ flex: 1, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }} className="px-3 py-2 rounded-lg outline-none text-sm" />
-          <input name="description" placeholder="Description (optional)" style={{ flex: 1, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }} className="px-3 py-2 rounded-lg outline-none text-sm" />
+        <form action={createOnboardingStepTemplate} className="flex flex-col sm:flex-row gap-2">
+          <input name="title" required placeholder="Step title" style={{ flex: 1, minWidth: 0, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }} className="px-3 py-2 rounded-lg outline-none text-sm" />
+          <input name="description" placeholder="Description (optional)" style={{ flex: 1, minWidth: 0, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }} className="px-3 py-2 rounded-lg outline-none text-sm" />
           <button type="submit" className="px-4 py-2 rounded-lg text-sm font-bold" style={{ background: "var(--primary)", color: "#0d0d0b" }}>Add step</button>
         </form>
       </section>
@@ -96,38 +89,31 @@ export default async function SettingsPage() {
       <section className="card rounded-2xl p-6">
         <h3 className="font-heading font-bold text-lg mb-1" style={{ color: "var(--text-primary)" }}>Playbooks library</h3>
         <p className="text-sm mb-4" style={{ color: "var(--text-secondary)" }}>
-          Shared across every client. Add a module, then add lessons to it.
+          Shared across every client. Click a module or lesson to edit or delete it; add new ones below.
         </p>
 
         <div className="space-y-2 mb-4">
           {modules.map((mod, i) => (
-            <div key={mod.id} className="rounded-lg p-3" style={{ background: "var(--surface)" }}>
-              <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{i + 1}. {mod.title}</p>
-              <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-                {mod.lessons.length} lesson{mod.lessons.length !== 1 ? "s" : ""}
-              </p>
-            </div>
+            <ModuleEditor
+              key={mod.id}
+              index={i}
+              modules={modules.map((m) => ({ id: m.id, title: m.title }))}
+              mod={{ id: mod.id, title: mod.title, lessons: mod.lessons.map((l) => ({ id: l.id, title: l.title, videoUrl: l.videoUrl, content: l.content })) }}
+            />
           ))}
           {modules.length === 0 && <p className="text-sm" style={{ color: "var(--text-secondary)" }}>No modules yet.</p>}
         </div>
 
-        <form action={createModule} className="flex gap-2 mb-5">
-          <input name="title" required placeholder="New module title, e.g. IG & YT Content" style={{ flex: 1, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }} className="px-3 py-2 rounded-lg outline-none text-sm" />
+        <form action={createModule} className="flex flex-col sm:flex-row gap-2 mb-5">
+          <input name="title" required placeholder="New module title, e.g. IG & YT Content" style={{ flex: 1, minWidth: 0, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }} className="px-3 py-2 rounded-lg outline-none text-sm" />
           <button type="submit" className="px-4 py-2 rounded-lg text-sm font-bold" style={{ background: "var(--primary)", color: "#0d0d0b" }}>Add module</button>
         </form>
 
         <div style={{ borderTop: "1px solid var(--border)" }} className="pt-4">
-          <p className="text-xs font-semibold mb-2" style={{ color: "var(--text-secondary)" }}>Add a lesson to a module</p>
-          <form action={createLesson} className="space-y-2">
-            <select name="moduleId" required style={{ width: "100%", background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }} className="px-3 py-2 rounded-lg outline-none text-sm">
-              <option value="">Choose a module...</option>
-              {modules.map((m) => <option key={m.id} value={m.id}>{m.title}</option>)}
-            </select>
-            <input name="title" required placeholder="Lesson title" style={{ width: "100%", background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }} className="px-3 py-2 rounded-lg outline-none text-sm" />
-            <input name="videoUrl" placeholder="YouTube or Loom link (optional)" style={{ width: "100%", background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }} className="px-3 py-2 rounded-lg outline-none text-sm" />
-            <textarea name="content" placeholder="Written content (optional)" rows={3} style={{ width: "100%", background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" }} className="px-3 py-2 rounded-lg outline-none text-sm resize-none" />
-            <button type="submit" className="px-4 py-2 rounded-lg text-sm font-bold" style={{ background: "var(--secondary)", color: "#14150f" }}>Add lesson</button>
-          </form>
+          <p className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>Add a lesson to a module</p>
+          <div className="-mx-5">
+            <LessonForm modules={modules.map((m) => ({ id: m.id, title: m.title }))} />
+          </div>
         </div>
       </section>
 

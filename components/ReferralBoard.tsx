@@ -49,7 +49,8 @@ export default function ReferralBoard({
   }
 
   return (
-    <div className="grid grid-cols-6 gap-3" style={{ minHeight: 500 }}>
+    <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0 pb-2">
+    <div className="grid grid-cols-6 gap-3 min-w-[1080px]" style={{ minHeight: 500 }}>
       {STAGES.map((stage) => {
         const items = referrals.filter((r) => r.stage === stage.key);
         const isOver = dragOverStage === stage.key;
@@ -106,6 +107,7 @@ export default function ReferralBoard({
           </div>
         );
       })}
+    </div>
     </div>
   );
 }
