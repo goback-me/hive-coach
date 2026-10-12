@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
 
 // `hidden` = hidden from the client's portal; only the coach ever gets those tabs, marked so they know.
 export default function ClientTabsShell({
@@ -11,11 +12,12 @@ export default function ClientTabsShell({
   initialTab?: string; // ?tab= — e.g. back on Leads after connecting Google
 }) {
   const [active, setActive] = useState(tabs.some((t) => t.key === initialTab) ? initialTab : tabs[0]?.key);
-  // In-page links like ?tab=leads change the URL without remounting — follow them.
+  // Follow ?tab= — in-page links, the client sidebar and back/forward all change it without remounting.
+  const urlTab = useSearchParams().get("tab");
   useEffect(() => {
-    if (initialTab && tabs.some((t) => t.key === initialTab)) setActive(initialTab);
+    if (urlTab && tabs.some((t) => t.key === urlTab)) setActive(urlTab);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialTab]);
+  }, [urlTab]);
 
   return (
     <div>
@@ -23,7 +25,11 @@ export default function ClientTabsShell({
         {tabs.map((t) => (
           <button
             key={t.key}
-            onClick={() => setActive(t.key)}
+            onClick={() => {
+              setActive(t.key);
+              // Keep ?tab= in the address bar in step (sidebar highlight, refresh, sharing a link).
+              window.history.replaceState(null, "", `${window.location.pathname}?tab=${t.key}`);
+            }}
             title={t.hidden ? "Hidden from the client" : undefined}
             className="pb-3 text-sm font-semibold flex items-center gap-1 whitespace-nowrap shrink-0"
             style={{
