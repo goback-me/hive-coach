@@ -120,8 +120,9 @@ export function metaAuthUrl(state: string) {
     client_id: process.env.META_APP_ID!,
     redirect_uri: process.env.META_REDIRECT_URI!,
     state,
-    scope: "ads_read",
     response_type: "code",
+    // Business apps (Facebook Login for Business) take a configuration id instead of scopes.
+    ...(process.env.META_CONFIG_ID ? { config_id: process.env.META_CONFIG_ID } : { scope: "ads_read" }),
   });
   return `https://www.facebook.com/v21.0/dialog/oauth?${params.toString()}`;
 }
