@@ -9,7 +9,7 @@ export default function LegalLayout({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen flex flex-col" style={{ background: "var(--surface)" }}>
       <header className="w-full max-w-3xl mx-auto px-4 sm:px-6 py-6 flex items-center justify-between gap-4">
-        <Link href="/login" aria-label={`${LEGAL.product} — sign in`}>
+        <Link href="/" aria-label={`${LEGAL.product} home`}>
           <Wordmark size={36} />
         </Link>
         <Link href="/login" className="text-sm font-semibold px-4 py-2 rounded-lg" style={{ color: "var(--text-primary)", border: "1px solid var(--border-strong)" }}>

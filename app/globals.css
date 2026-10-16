@@ -163,3 +163,64 @@ body {
 .legal li { margin: 0.3rem 0; }
 .legal strong { color: var(--text-primary); font-weight: 600; }
 .legal a { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
+
+/* Public homepage (app/page.tsx) — CSS-only motion. */
+.landing-glow {
+  background:
+    radial-gradient(60rem 30rem at 15% -10%, color-mix(in srgb, var(--secondary) 18%, transparent), transparent 70%),
+    radial-gradient(40rem 24rem at 95% 10%, color-mix(in srgb, var(--primary) 14%, transparent), transparent 70%);
+}
+.landing-grid {
+  background-image: linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(ellipse at 50% 0%, black 20%, transparent 70%);
+  opacity: 0.5;
+}
+.landing-fade { animation: landing-fade 0.8s cubic-bezier(0.22, 1, 0.36, 1) both; animation-delay: var(--d, 0s); }
+@keyframes landing-fade { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+
+.landing-float { animation: landing-float 5s ease-in-out infinite; animation-delay: var(--d, 0s); }
+@keyframes landing-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+
+.landing-bar { transform-origin: bottom; animation: landing-bar 1s cubic-bezier(0.22, 1, 0.36, 1) both; animation-delay: var(--d, 0s); }
+@keyframes landing-bar { from { transform: scaleY(0); } }
+
+.landing-pulse { position: relative; }
+.landing-pulse::after {
+  content: ""; position: absolute; inset: -4px; border-radius: 999px; border: 2px solid var(--primary);
+  animation: landing-pulse 2s ease-out infinite;
+}
+@keyframes landing-pulse { from { opacity: 0.7; transform: scale(0.6); } to { opacity: 0; transform: scale(1.6); } }
+
+/* Connection line between two nodes: moving dashes + a travelling dot. */
+.landing-flow {
+  position: relative; height: 2px;
+  background-image: linear-gradient(90deg, var(--border-strong) 50%, transparent 50%);
+  background-size: 12px 2px;
+  animation: landing-dash 1s linear infinite;
+}
+.landing-flow.reverse { animation-direction: reverse; }
+@keyframes landing-dash { to { background-position: 12px 0; } }
+.landing-flow::after {
+  content: ""; position: absolute; top: 50%; width: 10px; height: 10px; margin-top: -5px; border-radius: 999px;
+  background: var(--secondary); box-shadow: 0 0 12px var(--secondary);
+  animation: landing-travel 2.4s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+.landing-flow.reverse::after { animation-direction: reverse; }
+@keyframes landing-travel { from { left: 0; } to { left: calc(100% - 10px); } }
+
+.landing-pop { animation: landing-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+@keyframes landing-pop { from { opacity: 0; transform: scale(0.6); } }
+
+.landing-card { transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease; }
+.landing-card:hover { transform: translateY(-4px); box-shadow: 0 16px 40px -20px rgba(0, 0, 0, 0.35); border-color: var(--border-strong); }
+
+/* Sections fade in as they scroll into view where the browser supports it; elsewhere they're simply shown. */
+@supports (animation-timeline: view()) {
+  .landing-reveal { animation: landing-fade linear both; animation-timeline: view(); animation-range: entry 0% entry 40%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-fade, .landing-float, .landing-bar, .landing-flow, .landing-flow::after, .landing-pulse::after, .landing-pop, .landing-reveal { animation: none !important; }
+  .landing-card:hover { transform: none; }
+}

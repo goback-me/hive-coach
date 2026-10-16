@@ -44,6 +44,9 @@ export default function PrivacyPage() {
           We store only an encrypted access token and the ID and name of the ad account you selected. Performance figures are requested from Meta when you view them and kept in a short-lived server cache (about five minutes) so the page loads quickly; we do not keep a permanent copy. The permission is read-only: we cannot create, edit, pause or pay for ads. We do not read your Facebook profile content, posts, friends, messages or Pages.
         </p>
 
+        <h3>Enquiries</h3>
+        <p>If you send an enquiry from our website, we receive your name, email address, and any phone number, business name and message you include. We use them only to reply to you, and the enquiry is delivered to our team by email through our email provider, Resend.</p>
+
         <h3>Referrals</h3>
         <p>When someone is referred to the programme — through a client&apos;s referral link or by a client adding them — we collect the name, phone number or email address, and any note provided, so the coach can get in touch. Please only refer people who are happy to be contacted.</p>
 
@@ -76,7 +79,7 @@ export default function PrivacyPage() {
 
         <h2>5. Who can see your information</h2>
         <p>Inside the portal, a client can see only their own information. Coaches in the programme can see the information of the clients they coach.</p>
-        <p>Outside the portal, we share information only with service providers that help us run it, and only as needed for that purpose: our authentication provider (Clerk), our hosting and database providers, and Meta and Google when we fetch the data you authorised. We may also disclose information if the law requires it, or to protect the rights and safety of our users or others.</p>
+        <p>Outside the portal, we share information only with service providers that help us run it, and only as needed for that purpose: our authentication provider (Clerk), our email provider (Resend), our hosting and database providers, and Meta and Google when we fetch the data you authorised. We may also disclose information if the law requires it, or to protect the rights and safety of our users or others.</p>
 
         <h2>6. Storage outside Australia</h2>
         <p>Some of our service providers store or process information outside Australia, including in the United States. We take reasonable steps to make sure they protect it in a way consistent with the Australian Privacy Principles.</p>
