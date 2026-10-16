@@ -13,7 +13,7 @@ import { detectStatusColumn, normalizeStatus, sydneyDay, sydneyLocalToDate } fro
 import { LEAD_STAGES } from "@/lib/lead-stages";
 import { CLIENT_PREVIEW_COOKIE, CLIENT_TABS } from "@/lib/client-tabs";
 import { decryptToken, encryptToken } from "@/lib/crypto";
-import { getMetaReport, listMetaAdAccounts, normalizeAccountId, verifyMetaAccount, type MetaAdAccount, type MetaReport } from "@/lib/meta-ads";
+import { getMetaReport, listMetaAdAccounts, metaErrorInfo, normalizeAccountId, verifyMetaAccount, type MetaAdAccount, type MetaReport } from "@/lib/meta-ads";
 
 function slugify(name: string) {
   return name
@@ -868,7 +868,7 @@ export async function connectMetaAds(clientId: string, rawAccountId: string, acc
       data: { metaAdAccountId: adAccountId, metaAccountName: account.name, metaAccessToken: encryptToken(accessToken.trim()) },
     });
   } catch (e) {
-    return { error: errorMessage(e) };
+    return metaErrorInfo(e);
   }
   revalidatePath("/clients", "layout");
   return {};
@@ -881,26 +881,26 @@ export async function disconnectMetaAds(clientId: string) {
 }
 
 /** Live Meta numbers for the Ads tab — fetched after the page loads so the page never waits on Meta. */
-export async function getAdsReport(clientId: string, since: string | null, until: string | null): Promise<{ report?: MetaReport; error?: string }> {
+export async function getAdsReport(clientId: string, since: string | null, until: string | null): Promise<{ report?: MetaReport; error?: string; reconnect?: boolean }> {
   await requireClientAccess(clientId);
   const client = await prisma.client.findUnique({ where: { id: clientId }, select: { metaAdAccountId: true, metaAccessToken: true } });
-  if (!client?.metaAdAccountId || !client.metaAccessToken) return { error: "No ad account connected" };
+  if (!client?.metaAdAccountId || !client.metaAccessToken) return { error: "No ad account connected", reconnect: true };
   try {
     return { report: await getMetaReport(client.metaAdAccountId, client.metaAccessToken, since, until) };
   } catch (e) {
-    return { error: errorMessage(e) };
+    return metaErrorInfo(e);
   }
 }
 
 /** Ad accounts the client's connected Facebook login can see — for the account picker. */
-export async function getMetaAdAccounts(clientId: string): Promise<{ accounts?: MetaAdAccount[]; error?: string }> {
+export async function getMetaAdAccounts(clientId: string): Promise<{ accounts?: MetaAdAccount[]; error?: string; reconnect?: boolean }> {
   await requireClientAccess(clientId);
   const client = await prisma.client.findUnique({ where: { id: clientId }, select: { metaAccessToken: true } });
-  if (!client?.metaAccessToken) return { error: "Facebook isn't connected" };
+  if (!client?.metaAccessToken) return { error: "Facebook isn't connected", reconnect: true };
   try {
     return { accounts: await listMetaAdAccounts(decryptToken(client.metaAccessToken)) };
   } catch (e) {
-    return { error: errorMessage(e) };
+    return metaErrorInfo(e);
   }
 }
 

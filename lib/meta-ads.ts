@@ -13,20 +13,35 @@ async function metaGetAll(url: string): Promise<GraphRow[]> {
   for (let next: string | undefined = url; next; ) {
     const res: Response = await fetch(next, { cache: "no-store" });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok || data.error) throw new Error(friendlyError(data?.error));
+    if (!res.ok || data.error) throw metaError(data?.error);
     out.push(...(data.data ?? []));
     next = data.paging?.next;
   }
   return out;
 }
 
-function friendlyError(err?: { message?: string; code?: number; error_subcode?: number }) {
-  if (!err) return "Meta didn't respond — try again in a minute";
-  if (err.code === 190) return "Meta says that access token isn't valid (wrong, expired or revoked) — generate a new one and connect again";
-  if (err.code === 100 || err.code === 803) return "Meta couldn't find that ad account — check the ID (act_…) and that the token can see it";
-  if (err.code === 200 || err.code === 10) return "That token doesn't have permission to read this ad account (it needs ads_read)";
-  if (err.code === 17 || err.code === 4 || err.code === 613) return "Meta is rate-limiting requests — try again in a few minutes";
-  return err.message ?? "Meta API request failed";
+/** An error whose message is safe to show; `reconnect` = the Facebook login itself needs redoing. */
+export class MetaError extends Error {
+  constructor(message: string, public reconnect = false) {
+    super(message);
+  }
+}
+
+function metaError(err?: { message?: string; code?: number; error_subcode?: number; type?: string }) {
+  if (!err) return new MetaError("Meta didn't respond — try again in a minute");
+  if (err.code === 190 || err.code === 102) return new MetaError("Your Facebook connection has expired or was removed — reconnect to keep seeing ad spend", true);
+  if (err.code === 100 || err.code === 803) return new MetaError("Meta couldn't find that ad account — check the ID (act_…) and that this login can see it");
+  if (err.code === 10 || (err.code! >= 200 && err.code! < 300)) return new MetaError("This Facebook login doesn't have permission to read that ad account — reconnect and allow access to your ads", true);
+  if (err.code === 17 || err.code === 4 || err.code === 613 || err.code === 80004) return new MetaError("Meta is rate-limiting requests — try again in a few minutes");
+  console.error("Meta API error:", err); // raw Meta text stays in the server log, not on screen
+  return new MetaError("Meta couldn't complete that request — try again in a minute");
+}
+
+/** What to show the user for any failure on the Meta path. Unexpected errors are logged, never shown. */
+export function metaErrorInfo(e: unknown): { error: string; reconnect?: boolean } {
+  if (e instanceof MetaError) return { error: e.message, reconnect: e.reconnect || undefined };
+  console.error("Meta request failed:", e);
+  return { error: "Something went wrong talking to Meta — try again in a minute" };
 }
 
 export function normalizeAccountId(raw: string) {
@@ -38,7 +53,7 @@ export function normalizeAccountId(raw: string) {
 export async function verifyMetaAccount(adAccountId: string, accessToken: string) {
   const res = await fetch(`${GRAPH}/${adAccountId}?fields=name,currency&access_token=${encodeURIComponent(accessToken)}`, { cache: "no-store" });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok || data.error) throw new Error(friendlyError(data?.error));
+  if (!res.ok || data.error) throw metaError(data?.error);
   return { name: (data.name as string) ?? adAccountId, currency: (data.currency as string) ?? "AUD" };
 }
 
@@ -131,7 +146,10 @@ export function metaAuthUrl(state: string) {
 export async function exchangeMetaCode(code: string): Promise<{ token: string; expiresIn: number | null }> {
   const base = { client_id: process.env.META_APP_ID!, client_secret: process.env.META_APP_SECRET! };
   const short = await fetch(`${GRAPH}/oauth/access_token?${new URLSearchParams({ ...base, redirect_uri: process.env.META_REDIRECT_URI!, code })}`, { cache: "no-store" }).then((r) => r.json());
-  if (short.error || !short.access_token) throw new Error(friendlyError(short.error));
+  if (short.error || !short.access_token) {
+    console.error("Meta code exchange failed:", short.error);
+    throw new MetaError("The Facebook sign-in expired or was already used — try connecting again");
+  }
   const long = await fetch(`${GRAPH}/oauth/access_token?${new URLSearchParams({ ...base, grant_type: "fb_exchange_token", fb_exchange_token: short.access_token })}`, { cache: "no-store" }).then((r) => r.json());
   // If the swap fails the short-lived token still works for now — use it rather than failing the connect.
   return long.access_token ? { token: long.access_token, expiresIn: long.expires_in ?? null } : { token: short.access_token, expiresIn: short.expires_in ?? null };

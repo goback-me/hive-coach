@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { encryptToken } from "@/lib/crypto";
 import { requireClientAccess } from "@/lib/auth";
-import { exchangeMetaCode, listMetaAdAccounts, META_OAUTH_STATE_COOKIE } from "@/lib/meta-ads";
+import { exchangeMetaCode, listMetaAdAccounts, META_OAUTH_STATE_COOKIE, metaErrorInfo } from "@/lib/meta-ads";
 
 // Facebook sends the user back here (inside the popup). We save the login,
 // auto-pick the ad account when there's only one, then close the popup and
@@ -51,7 +51,6 @@ export async function GET(req: NextRequest) {
     revalidatePath("/clients", "layout");
     return finish(client.slug);
   } catch (e) {
-    console.error("Meta OAuth callback failed:", e);
-    return finish(client.slug, e instanceof Error ? e.message : "Facebook connection failed");
+    return finish(client.slug, metaErrorInfo(e).error); // logs anything unexpected; only a safe message reaches the page
   }
 }

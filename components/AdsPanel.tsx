@@ -1,12 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { connectMetaAds, disconnectMetaAds, getAdsReport, getMetaAdAccounts, selectMetaAdAccount } from "@/lib/actions";
 import type { MetaAdAccount } from "@/lib/meta-ads";
 import { inDateRange, pct, resolveRange, type DateRange, type LeadView } from "@/lib/lead-stages";
 import type { MetaReport } from "@/lib/meta-ads";
 import DateRangeBar from "./DateRangeBar";
+
+// A server action can reject outright (network drop, server restart) — show this instead of hanging.
+const OFFLINE = "Couldn't reach the server — check your connection and try again";
 
 const inputStyle = { width: "100%", background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text-primary)" } as const;
 
@@ -36,7 +40,7 @@ export default function AdsPanel({
   if (!account || mode === "pick") {
     return <AccountPicker clientId={clientId} current={account?.id ?? null} onDone={account ? () => setMode("view") : undefined} onReconnect={() => setMode("connect")} />;
   }
-  return <Report clientId={clientId} account={account} leads={leads} hasSheet={hasSheet} onChange={() => setMode("pick")} />;
+  return <Report clientId={clientId} account={account} leads={leads} hasSheet={hasSheet} onChange={() => setMode("pick")} onReconnect={() => setMode("connect")} />;
 }
 
 /** Opens Facebook login in a popup; the callback page posts back here when it's done. */
@@ -80,13 +84,15 @@ function AccountPicker({ clientId, current, onDone, onReconnect }: { clientId: s
   const [saving, setSaving] = useState<string | null>(null);
 
   useEffect(() => {
-    getMetaAdAccounts(clientId).then((r) => (r.error ? setError(r.error) : setAccounts(r.accounts!)));
+    getMetaAdAccounts(clientId)
+      .then((r) => (r.error ? setError(r.error) : setAccounts(r.accounts!)))
+      .catch(() => setError(OFFLINE));
   }, [clientId]);
 
   async function pick(id: string) {
     setSaving(id);
     setError(null);
-    const r = await selectMetaAdAccount(clientId, id);
+    const r = await selectMetaAdAccount(clientId, id).catch(() => ({ error: OFFLINE }));
     setSaving(null);
     if (r.error) setError(r.error);
     else onDone?.();
@@ -103,6 +109,11 @@ function AccountPicker({ clientId, current, onDone, onReconnect }: { clientId: s
       </div>
       {error && <p className="text-sm" style={{ color: "var(--danger)" }}>{error}</p>}
       {!accounts && !error && <p className="text-sm" style={{ color: "var(--text-muted)" }}>Loading your ad accounts…</p>}
+      {accounts?.length === 0 && (
+        <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+          This Facebook login can&apos;t see any ad accounts. Reconnect with the login that manages your ads, or ask the account owner to give you access in Business Settings.
+        </p>
+      )}
       <div className="space-y-2">
         {accounts?.map((a) => (
           <button
@@ -148,11 +159,13 @@ function FacebookMark({ size = 44 }: { size?: number }) {
   );
 }
 
-function Report({ clientId, account, leads, hasSheet, onChange }: { clientId: string; account: { id: string; name: string | null }; leads: LeadView[]; hasSheet: boolean; onChange: () => void }) {
+function Report({ clientId, account, leads, hasSheet, onChange, onReconnect }: { clientId: string; account: { id: string; name: string | null }; leads: LeadView[]; hasSheet: boolean; onChange: () => void; onReconnect: () => void }) {
   const [range, setRange] = useState<DateRange>({ preset: "month" });
   const [report, setReport] = useState<MetaReport | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ message: string; reconnect?: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [attempt, setAttempt] = useState(0); // bumped by "Try again"
+  const [disconnecting, setDisconnecting] = useState(false);
   const req = useRef(0);
   const bounds = resolveRange(range);
 
@@ -160,13 +173,15 @@ function Report({ clientId, account, leads, hasSheet, onChange }: { clientId: st
     const id = ++req.current;
     setLoading(true);
     setError(null);
-    getAdsReport(clientId, bounds.from, bounds.to).then((r) => {
-      if (id !== req.current) return; // a newer range was picked meanwhile
-      setLoading(false);
-      if (r.error) setError(r.error);
-      else setReport(r.report!);
-    });
-  }, [clientId, bounds.from, bounds.to]);
+    getAdsReport(clientId, bounds.from, bounds.to)
+      .catch(() => ({ error: OFFLINE, reconnect: false, report: undefined }))
+      .then((r) => {
+        if (id !== req.current) return; // a newer range was picked meanwhile
+        setLoading(false);
+        if (r.error) setError({ message: r.error, reconnect: r.reconnect });
+        else setReport(r.report!);
+      });
+  }, [clientId, bounds.from, bounds.to, attempt]);
 
   const money = (n: number, cents = false) =>
     n.toLocaleString("en-AU", { style: "currency", currency: report?.currency ?? "AUD", maximumFractionDigits: cents ? 2 : 0, minimumFractionDigits: cents ? 2 : 0 });
@@ -177,6 +192,19 @@ function Report({ clientId, account, leads, hasSheet, onChange }: { clientId: st
   const t = report?.totals;
   const leadCount = hasSheet ? sheetLeads.length : t?.leads ?? 0;
   const maxSeries = Math.max(...(report?.series.map((s) => s.spend) ?? [0]), 1);
+  // Connected, but Meta has nothing for these dates (new account, paused ads, or a reviewer's test account).
+  const empty = !!report && report.campaigns.length === 0 && report.totals.spend === 0;
+
+  async function disconnect() {
+    if (!confirm("Disconnect this ad account? The Bakery deletes its saved Facebook access and stops reading this account's ad data.")) return;
+    setDisconnecting(true);
+    try {
+      await disconnectMetaAds(clientId);
+    } catch {
+      setDisconnecting(false);
+      alert("Couldn't disconnect just now — please try again.");
+    }
+  }
 
   return (
     <div className="space-y-5">
@@ -196,13 +224,12 @@ function Report({ clientId, account, leads, hasSheet, onChange }: { clientId: st
             Change account
           </button>
           <button
-            onClick={async () => {
-              if (confirm("Disconnect this ad account? Spend stops showing until it's connected again.")) await disconnectMetaAds(clientId);
-            }}
-            className="text-xs font-semibold px-3 py-1.5 rounded-lg"
+            onClick={disconnect}
+            disabled={disconnecting}
+            className="text-xs font-semibold px-3 py-1.5 rounded-lg disabled:opacity-60"
             style={{ color: "var(--danger)", border: "1px solid var(--border-strong)" }}
           >
-            Disconnect
+            {disconnecting ? "Disconnecting…" : "Disconnect"}
           </button>
         </div>
       </div>
@@ -214,11 +241,27 @@ function Report({ clientId, account, leads, hasSheet, onChange }: { clientId: st
           <span className="material-symbols-outlined text-3xl" style={{ color: "var(--danger)" }}>error</span>
           <div className="flex-1 min-w-[200px]">
             <p className="font-semibold" style={{ color: "var(--text-primary)" }}>Couldn&apos;t load spend from Meta</p>
-            <p className="text-sm" style={{ color: "var(--text-secondary)" }}>{error}</p>
+            <p className="text-sm" style={{ color: "var(--text-secondary)" }}>{error.message}</p>
           </div>
-          <button onClick={onChange} className="px-4 py-2 rounded-lg text-sm font-bold" style={{ background: "var(--secondary)", color: "#14150f" }}>
-            Reconnect
-          </button>
+          {error.reconnect ? (
+            <button onClick={onReconnect} className="px-4 py-2 rounded-lg text-sm font-bold" style={{ background: "var(--secondary)", color: "#14150f" }}>
+              Reconnect Facebook
+            </button>
+          ) : (
+            <button onClick={() => setAttempt((n) => n + 1)} className="px-4 py-2 rounded-lg text-sm font-bold" style={{ background: "var(--secondary)", color: "#14150f" }}>
+              Try again
+            </button>
+          )}
+        </div>
+      ) : empty ? (
+        <div className={`card rounded-2xl p-10 flex flex-col items-center text-center gap-2 transition-opacity ${loading ? "opacity-50" : ""}`}>
+          <span className="icon-chip w-12 h-12" style={{ background: "var(--primary-tint)" }}>
+            <span className="material-symbols-outlined text-[26px]" style={{ color: "var(--primary)" }}>query_stats</span>
+          </span>
+          <h3 className="font-heading font-bold text-lg mt-1" style={{ color: "var(--text-primary)" }}>No ad activity in this period</h3>
+          <p className="text-sm max-w-md" style={{ color: "var(--text-secondary)" }}>
+            {account.name ?? "This ad account"} is connected, but Meta has no spend for these dates. Try a longer date range, or check back once a campaign is running.
+          </p>
         </div>
       ) : (
         <>
@@ -229,7 +272,7 @@ function Report({ clientId, account, leads, hasSheet, onChange }: { clientId: st
             <Kpi label="Clicks" value={t ? t.clicks.toLocaleString() : "…"} sub={t && t.impressions ? `${pct(t.clicks / t.impressions)} CTR · ${t.impressions.toLocaleString()} impressions` : undefined} />
           </div>
 
-          {report && report.series.length > 1 && (
+          {report && report.series.length > 1 && report.totals.spend > 0 && (
             <div className={`card rounded-2xl p-6 transition-opacity ${loading ? "opacity-50" : ""}`}>
               <h3 className="font-heading font-bold text-lg mb-4" style={{ color: "var(--text-primary)" }}>Spend over time</h3>
               <div className="flex items-end gap-[3px] h-36">
@@ -317,7 +360,7 @@ function ConnectForm({ clientId, oauthReady, initialError, onCancel }: { clientI
   async function save() {
     setSaving(true);
     setError(null);
-    const r = await connectMetaAds(clientId, accountId, token);
+    const r = await connectMetaAds(clientId, accountId, token).catch(() => ({ error: OFFLINE }));
     setSaving(false);
     if (r.error) return setError(r.error);
     setToken(""); // don't keep the raw token around
@@ -350,6 +393,13 @@ function ConnectForm({ clientId, oauthReady, initialError, onCancel }: { clientI
           {oauthReady
             ? "A Facebook window opens — log in, allow access to your ads, and you're done."
             : "One-click Facebook connect isn't switched on yet (the Meta app keys need adding). Use an access token below for now."}
+        </p>
+        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+          Read-only access to ad performance (ads_read) — we never post, change or spend anything. See our{" "}
+          <Link href="/privacy" target="_blank" className="underline" style={{ color: "var(--text-secondary)" }}>
+            Privacy Policy
+          </Link>
+          .
         </p>
         {facebook.waiting && (
           <button onClick={facebook.open} className="text-xs font-semibold" style={{ color: "var(--primary)" }}>
