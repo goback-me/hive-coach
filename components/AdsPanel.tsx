@@ -70,6 +70,11 @@ function useFacebookPopup(clientId: string, onError: (e: string) => void) {
     waiting,
     open() {
       const url = `/api/meta/connect?clientId=${clientId}`;
+      // Phones and tablets turn popups into new tabs that Facebook (or its app) breaks — go through Facebook in this tab instead.
+      if (window.matchMedia("(pointer: coarse)").matches) {
+        window.location.href = `${url}&mode=page`;
+        return;
+      }
       const w = 620, h = 720;
       const popup = window.open(url, "facebook-connect", `width=${w},height=${h},left=${window.screenX + (window.outerWidth - w) / 2},top=${window.screenY + 60}`);
       if (!popup) window.location.href = url; // popup blocked — do it in this tab
@@ -391,7 +396,7 @@ function ConnectForm({ clientId, oauthReady, initialError, onCancel }: { clientI
         </button>
         <p className="text-xs" style={{ color: "var(--text-muted)" }}>
           {oauthReady
-            ? "A Facebook window opens — log in, allow access to your ads, and you're done."
+            ? "You'll go to Facebook — log in, allow access to your ads, and you'll come straight back here."
             : "One-click Facebook connect isn't switched on yet (the Meta app keys need adding). Use an access token below for now."}
         </p>
         <p className="text-xs" style={{ color: "var(--text-muted)" }}>
